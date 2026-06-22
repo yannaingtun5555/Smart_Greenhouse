@@ -1,0 +1,145 @@
+services:
+  # ─────────────────────────────────────────────
+  # PostgreSQL
+  # ─────────────────────────────────────────────
+  db:
+    image: postgres:15
+    container_name: greenhouse_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-greenhouse}
+      POSTGRES_USER: ${DB_USER:-greenhouse_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-greenhouse_user} -d ${DB_NAME:-greenhouse}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - greenhouse_network
+
+  # ─────────────────────────────────────────────
+  # Mosquitto MQTT broker
+  # ─────────────────────────────────────────────
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: greenhouse_mqtt
+    restart: always
+    ports:
+      - "1883:1883"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./mosquitto/config:/mosquitto/config:ro
+    healthcheck:
+      test: ["CMD", "pgrep", "mosquitto"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - greenhouse_network
+
+  # ─────────────────────────────────────────────
+  # Redis (cache + optional Celery broker)
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: greenhouse_redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - greenhouse_network
+
+  # ─────────────────────────────────────────────
+  # Django API server
+  # ─────────────────────────────────────────────
+  django:
+    build: ./dashboard
+    container_name: greenhouse_django
+    restart: always
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 core.wsgi:application"
+    volumes:
+      - ./dashboard:/app
+      - ../frontend:/frontend
+      - static_volume:/app/staticfiles
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    environment:
+      # Django
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-change-me}
+      DEBUG: ${DEBUG:-True}
+      ALLOWED_HOSTS: "*"
+      DJANGO_SETTINGS_MODULE: core.settings
+      # Database
+      DB_NAME: ${DB_NAME:-greenhouse}
+      DB_USER: ${DB_USER:-greenhouse_user}
+      DB_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
+      DB_HOST: db
+      DB_PORT: 5432
+      # MQTT
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 1883
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FRONTEND_DIR: /frontend
+      # CORS
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+    networks:
+      - greenhouse_network
+
+  # ─────────────────────────────────────────────
+  # MQTT Worker (standalone listener + dispatcher)
+  # ─────────────────────────────────────────────
+  mqtt_worker:
+    build: ./mqtt
+    container_name: greenhouse_mqtt_worker
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    environment:
+      # Database
+      DB_NAME: ${DB_NAME:-greenhouse}
+      DB_USER: ${DB_USER:-greenhouse_user}
+      DB_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
+      DB_HOST: db
+      DB_PORT: 5432
+      # MQTT
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 1883
+    networks:
+      - greenhouse_network
+
+volumes:
+  postgres_data:
+  mosquitto_data:
+  mosquitto_log:
+  static_volume:
+
+networks:
+  greenhouse_network:
+    driver: bridge

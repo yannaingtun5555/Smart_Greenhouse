@@ -1,0 +1,25 @@
+smart_greenhouse/
+├── docs/                     (optional)
+├── server/
+│   ├── docker-compose.yml
+│   ├── .env
+│   ├── mqtt_worker.py        # Background consumer
+│   ├── scheduler.py          # Background scheduler
+│   └── dashboard/            # Django project
+│       ├── Dockerfile
+│       ├── requirements.txt
+│       ├── manage.py
+│       └── core/             # Django main app
+│           ├── __init__.py
+│           ├── settings.py
+│           ├── urls.py
+│           ├── asgi.py
+│           ├── wsgi.py
+│           └── apps/
+│               ├── accounts/        # custom user, login
+│               ├── greenhouses/     # models, views, api
+│               ├── devices/         # ESP token handling
+│               └── schedules/       # scheduling logic
+└── mosquitto/
+    └── config/
+        └── mosquitto.conf

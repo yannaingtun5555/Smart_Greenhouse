@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GreenMind – Smart Greenhouse Dashboard</title>
+  <meta name="description" content="Monitor and control your smart greenhouse in real-time. Live sensor data, device control, and automated schedules." />
+  <meta name="theme-color" content="#06090f" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════ AUTH SCREEN ═══════════════════════ -->
+<div id="auth-screen" class="screen auth-screen active" role="main">
+  <div class="auth-bg">
+    <div class="auth-orb orb-1"></div>
+    <div class="auth-orb orb-2"></div>
+    <div class="auth-orb orb-3"></div>
+    <div class="auth-orb orb-4"></div>
+    <div class="auth-orb orb-5"></div>
+  </div>
+  <div class="auth-card glass-strong">
+    <div class="auth-logo">
+      <span class="logo-icon" aria-hidden="true">🌿</span>
+      <span class="logo-text">GreenMind</span>
+    </div>
+    <p class="auth-tagline">Smart Greenhouse Control Platform</p>
+
+    <!-- Tab switcher -->
+    <div class="auth-tabs" role="tablist" aria-label="Authentication mode">
+      <button type="button" id="tab-login"    class="auth-tab active" role="tab" aria-selected="true"  onclick="switchTab('login')">Sign In</button>
+      <button type="button" id="tab-register" class="auth-tab"        role="tab" aria-selected="false" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <!-- Login form -->
+    <form id="login-form" class="auth-form" onsubmit="handleLogin(event)" novalidate>
+      <div class="field-group">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" placeholder="your_username" required autocomplete="username" />
+      </div>
+      <div class="field-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+      </div>
+      <div id="login-error" class="form-error hidden" role="alert"></div>
+      <button type="submit" id="login-btn" class="btn-primary full-width">
+        <span class="btn-text">Sign In</span>
+        <span class="btn-loader hidden" aria-hidden="true">⟳</span>
+      </button>
+    </form>
+
+    <!-- Register form -->
+    <form id="register-form" class="auth-form hidden" onsubmit="handleRegister(event)" novalidate>
+      <div class="field-row">
+        <div class="field-group">
+          <label for="reg-first">First Name</label>
+          <input type="text" id="reg-first" placeholder="John" autocomplete="given-name" />
+        </div>
+        <div class="field-group">
+          <label for="reg-last">Last Name</label>
+          <input type="text" id="reg-last" placeholder="Doe" autocomplete="family-name" />
+        </div>
+      </div>
+      <div class="field-group">
+        <label for="reg-username">Username</label>
+        <input type="text" id="reg-username" placeholder="farmer_john" required autocomplete="username" />
+      </div>
+      <div class="field-group">
+        <label for="reg-email">Email</label>
+        <input type="email" id="reg-email" placeholder="john@farm.com" required autocomplete="email" />
+      </div>
+      <div class="field-group">
+        <label for="reg-phone">Phone (optional)</label>
+        <input type="tel" id="reg-phone" placeholder="+959123456789" autocomplete="tel" />
+      </div>
+      <div class="field-group">
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" placeholder="••••••••" required autocomplete="new-password" />
+      </div>
+      <div class="field-group">
+        <label for="reg-password2">Confirm Password</label>
+        <input type="password" id="reg-password2" placeholder="••••••••" required autocomplete="new-password" />
+      </div>
+      <div id="register-error" class="form-error hidden" role="alert"></div>
+      <button type="submit" id="register-btn" class="btn-primary full-width">
+        <span class="btn-text">Create Account</span>
+        <span class="btn-loader hidden" aria-hidden="true">⟳</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════ MAIN APP ═══════════════════════ -->
+<div id="app-screen" class="screen app-screen hidden" role="application">
+
+  <!-- ══════ SIDEBAR ══════ -->
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <div class="sidebar-logo">
+      <span class="logo-icon" aria-hidden="true">🌿</span>
+      <span class="logo-text">GreenMind</span>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Main menu">
+      <div class="nav-section-label">Main</div>
+      <button id="nav-overview" class="nav-item active" onclick="navigateTo('overview')" aria-current="page">
+        <span class="nav-icon" aria-hidden="true">📊</span>
+        <span class="nav-label">Overview</span>
+      </button>
+      <button id="nav-sensors" class="nav-item" onclick="navigateTo('sensors')">
+        <span class="nav-icon" aria-hidden="true">📡</span>
+        <span class="nav-label">Sensor Data</span>
+      </button>
+      <button id="nav-analytics" class="nav-item" onclick="navigateTo('analytics')">
+        <span class="nav-icon" aria-hidden="true">📈</span>
+        <span class="nav-label">Analytics</span>
+      </button>
+
+      <div class="nav-section-label" style="margin-top:6px;">Control</div>
+      <button id="nav-control" class="nav-item" onclick="navigateTo('control')">
+        <span class="nav-icon" aria-hidden="true">🎛️</span>
+        <span class="nav-label">Device Control</span>
+      </button>
+      <button id="nav-schedules" class="nav-item" onclick="navigateTo('schedules')">
+        <span class="nav-icon" aria-hidden="true">🗓️</span>
+        <span class="nav-label">Schedules</span>
+      </button>
+
+      <div class="nav-section-label" style="margin-top:6px;">Manage</div>
+      <button id="nav-greenhouses" class="nav-item" onclick="navigateTo('greenhouses')">
+        <span class="nav-icon" aria-hidden="true">🏡</span>
+        <span class="nav-label">Greenhouses</span>
+      </button>
+      <button id="nav-profile" class="nav-item" onclick="navigateTo('profile')">
+        <span class="nav-icon" aria-hidden="true">👤</span>
+        <span class="nav-label">Profile</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-badge" id="user-badge">
+        <div class="user-avatar-wrap" id="user-avatar">?</div>
+        <div class="user-info">
+          <span class="user-name" id="sidebar-username">—</span>
+          <span class="user-role" id="sidebar-role">Farmer</span>
+        </div>
+      </div>
+      <div class="sidebar-actions">
+        <button class="btn-secondary" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" style="font-size:.85rem;">🌙 Theme</button>
+        <button class="btn-logout" id="logout-btn" onclick="handleLogout()" title="Sign out">
+          <span>⏻</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══════ MAIN CONTENT ══════ -->
+  <main class="main-content" id="main-content">
+
+    <!-- Top bar -->
+    <header class="topbar" role="banner">
+      <div class="topbar-left">
+        <!-- Mobile hamburger -->
+        <button class="btn-icon mobile-menu-btn" id="mobile-menu-btn" onclick="openMobileSidebar()" aria-label="Open menu" aria-expanded="false">☰</button>
+
+        <h1 class="page-title" id="page-title">Overview</h1>
+
+        <!-- Greenhouse selector -->
+        <div class="gh-selector-wrap" id="gh-selector">
+          <span class="gh-selector-icon" aria-hidden="true">🏡</span>
+          <select id="gh-select" onchange="handleGhChange()" class="gh-select-input" aria-label="Select greenhouse">
+            <option value="">Select Greenhouse…</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <!-- Connection status -->
+        <div class="connection-pill" title="API connection status" aria-live="polite">
+          <div class="status-dot" id="connection-status" aria-label="Offline"></div>
+          <span id="last-refresh" class="last-refresh">—</span>
+        </div>
+        <button class="btn-icon" id="refresh-btn" onclick="refreshData()" title="Refresh data" aria-label="Refresh data">↻</button>
+      </div>
+    </header>
+
+    <!-- ══════════════════════
+         PAGE: Overview
+    ══════════════════════ -->
+    <section id="page-overview" class="page" aria-label="Overview">
+
+      <!-- Live stats bar -->
+      <div class="overview-stats-bar" id="overview-stats-bar">
+        <!-- injected by JS -->
+      </div>
+
+      <!-- Sensor cards -->
+      <div class="sensor-grid" id="overview-sensor-grid" aria-live="polite">
+        <!-- Injected by JS -->
+      </div>
+
+      <!-- Bottom row -->
+      <div class="overview-bottom">
+        <!-- Device State -->
+        <div class="card glass device-state-card" id="device-state-card">
+          <div class="card-title">
+            <span class="card-title-icon" aria-hidden="true">🎛️</span>
+            Device Status
+          </div>
+          <div class="device-indicators" id="device-indicators">
+            <div class="device-indicator" id="ind-fan" role="status" aria-label="Fan status">
+              <span class="device-icon" aria-hidden="true">💨</span>
+              <span class="device-label">Fan</span>
+              <span class="device-badge badge-off">OFF</span>
+            </div>
+            <div class="device-indicator" id="ind-pump" role="status" aria-label="Water pump status">
+              <span class="device-icon" aria-hidden="true">💧</span>
+              <span class="device-label">Pump</span>
+              <span class="device-badge badge-off">OFF</span>
+            </div>
+            <div class="device-indicator" id="ind-light" role="status" aria-label="Light status">
+              <span class="device-icon" aria-hidden="true">💡</span>
+              <span class="device-label">Light</span>
+              <span class="device-badge badge-off">OFF</span>
+            </div>
+            <div class="device-indicator" id="ind-energy" role="status" aria-label="Energy mode">
+              <span class="device-icon" aria-hidden="true">⚡</span>
+              <span class="device-label">Energy</span>
+              <span class="device-badge badge-off">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card glass activity-card">
+          <div class="card-title">
+            <span class="card-title-icon" aria-hidden="true">📋</span>
+            Recent Activity
+          </div>
+          <ul class="activity-list" id="activity-list" aria-live="polite" aria-label="Activity log">
+            <li class="activity-item muted">
+              <span class="activity-msg">No activity yet…</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════
+         PAGE: Sensors
+    ══════════════════════ -->
+    <section id="page-sensors" class="page hidden" aria-label="Sensor data">
+      <div class="sensor-history-header">
+        <div class="sensor-history-controls">
+          <div class="field-group inline">
+            <label for="sensor-limit">Show last</label>
+            <select id="sensor-limit" onchange="loadSensorHistory()" class="compact-select" aria-label="Number of sensor readings">
+              <option value="20">20</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="500">500</option>
+            </select>
+            <label>readings</label>
+          </div>
+        </div>
+        <button class="btn-secondary" onclick="loadSensorHistory()" aria-label="Refresh sensor data">↻ Refresh</button>
+      </div>
+      <div class="sensor-table-wrap card glass">
+        <table class="sensor-table" id="sensor-table" aria-label="Sensor readings">
+          <thead>
+            <tr>
+              <th scope="col">⏰ Timestamp</th>
+              <th scope="col">🌡️ Temp (°C)</th>
+              <th scope="col">💧 Humidity (%)</th>
+              <th scope="col">🪴 Soil (%)</th>
+              <th scope="col">☀️ Light (lx)</th>
+              <th scope="col">🔋 Battery (V)</th>
+            </tr>
+          </thead>
+          <tbody id="sensor-tbody">
+            <tr><td colspan="6" class="table-empty">Select a greenhouse to load data</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══════════════════════
+         PAGE: Control
+    ══════════════════════ -->
+    <section id="page-control" class="page hidden" aria-label="Device control">
+      <div class="control-notice" id="control-notice"></div>
+      <div class="control-grid" id="control-grid">
+        <!-- Fan -->
+        <div class="control-card glass" id="ctrl-fan" style="--ctrl-color: rgba(59,130,246,.08);">
+          <div class="ctrl-icon-wrap" aria-hidden="true">💨</div>
+          <div class="ctrl-title">Fan</div>
+          <p class="ctrl-status" id="ctrl-fan-status">—</p>
+          <div class="ctrl-btns">
+            <button id="ctrl-fan-on"  class="btn-on"  onclick="sendControl('fan','on')"  aria-label="Turn fan on">ON</button>
+            <button id="ctrl-fan-off" class="btn-off" onclick="sendControl('fan','off')" aria-label="Turn fan off">OFF</button>
+          </div>
+        </div>
+        <!-- Pump -->
+        <div class="control-card glass" id="ctrl-pump" style="--ctrl-color: rgba(34,197,94,.06);">
+          <div class="ctrl-icon-wrap" aria-hidden="true">💧</div>
+          <div class="ctrl-title">Water Pump</div>
+          <p class="ctrl-status" id="ctrl-pump-status">—</p>
+          <div class="ctrl-btns">
+            <button id="ctrl-pump-on"  class="btn-on"  onclick="sendControl('pump','on')"  aria-label="Turn pump on">ON</button>
+            <button id="ctrl-pump-off" class="btn-off" onclick="sendControl('pump','off')" aria-label="Turn pump off">OFF</button>
+          </div>
+        </div>
+        <!-- Light -->
+        <div class="control-card glass" id="ctrl-light" style="--ctrl-color: rgba(245,158,11,.06);">
+          <div class="ctrl-icon-wrap" aria-hidden="true">💡</div>
+          <div class="ctrl-title">Light</div>
+          <p class="ctrl-status" id="ctrl-light-status">—</p>
+          <div class="ctrl-btns">
+            <button id="ctrl-light-on"  class="btn-on"  onclick="sendControl('light','on')"  aria-label="Turn light on">ON</button>
+            <button id="ctrl-light-off" class="btn-off" onclick="sendControl('light','off')" aria-label="Turn light off">OFF</button>
+          </div>
+        </div>
+      </div>
+      <div id="ctrl-feedback" class="ctrl-feedback hidden" role="status" aria-live="polite"></div>
+    </section>
+
+    <!-- ══════════════════════
+         PAGE: Schedules
+    ══════════════════════ -->
+    <section id="page-schedules" class="page hidden" aria-label="Schedules">
+      <div class="schedules-header">
+        <div class="page-section-header">
+          <h2>Automation Rules</h2>
+          <p>Auto-trigger devices by time or sensor threshold</p>
+        </div>
+        <button class="btn-primary" onclick="openScheduleModal()" aria-label="Add new schedule">
+          <span>＋</span> New Schedule
+        </button>
+      </div>
+      <div class="schedules-list" id="schedules-list" aria-live="polite">
+        <div class="card glass table-empty">Select a greenhouse to view schedules</div>
+      </div>
+
+      <!-- Schedule Modal -->
+      <div id="schedule-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="sched-modal-title" onclick="closeScheduleModal(event)">
+        <div class="modal-card" id="schedule-modal-card">
+          <div class="modal-header">
+            <h2 class="modal-title" id="sched-modal-title">✨ New Schedule</h2>
+            <button class="modal-close" onclick="closeScheduleModal()" aria-label="Close modal">✕</button>
+          </div>
+          <form id="schedule-form" onsubmit="handleCreateSchedule(event)" novalidate>
+            <div style="display:flex;flex-direction:column;gap:16px;">
+              <div class="field-row">
+                <div class="field-group">
+                  <label for="sched-device">Device</label>
+                  <select id="sched-device" required aria-required="true">
+                    <option value="fan">💨 Fan</option>
+                    <option value="pump">💧 Water Pump</option>
+                    <option value="light">💡 Light</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label for="sched-action">Action</label>
+                  <select id="sched-action" required aria-required="true">
+                    <option value="on">Turn ON</option>
+                    <option value="off">Turn OFF</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-group">
+                <label for="sched-condition">Trigger Type</label>
+                <select id="sched-condition" required onchange="toggleScheduleCondition()">
+                  <option value="time">⏰ Time-based (daily)</option>
+                  <option value="sensor">📡 Sensor threshold</option>
+                </select>
+              </div>
+              <!-- Time fields -->
+              <div id="sched-time-fields">
+                <div class="field-group">
+                  <label for="sched-time">Time of Day</label>
+                  <input type="time" id="sched-time" step="60" aria-required="true" />
+                </div>
+              </div>
+              <!-- Sensor fields -->
+              <div id="sched-sensor-fields" class="hidden">
+                <div class="field-group" style="margin-bottom:14px;">
+                  <label for="sched-sensor-name">Sensor</label>
+                  <select id="sched-sensor-name">
+                    <option value="temperature">🌡️ Temperature (°C)</option>
+                    <option value="humidity">💧 Humidity (%)</option>
+                    <option value="soil_moisture">🪴 Soil Moisture (%)</option>
+                    <option value="light_intensity">☀️ Light Intensity (lx)</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <div class="field-group">
+                    <label for="sched-operator">Operator</label>
+                    <select id="sched-operator">
+                      <option value=">">&gt; Greater than</option>
+                      <option value="<">&lt; Less than</option>
+                      <option value=">=">&gt;= Greater or equal</option>
+                      <option value="<=">&lt;= Less or equal</option>
+                      <option value="==">== Equal to</option>
+                    </select>
+                  </div>
+                  <div class="field-group">
+                    <label for="sched-threshold">Threshold Value</label>
+                    <input type="number" id="sched-threshold" step="0.1" placeholder="e.g. 30.0" />
+                  </div>
+                </div>
+              </div>
+              <div id="schedule-modal-error" class="form-error hidden" role="alert"></div>
+              <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeScheduleModal()">Cancel</button>
+                <button type="submit" class="btn-primary">Create Schedule</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════
+         PAGE: Greenhouses
+    ══════════════════════ -->
+    <section id="page-greenhouses" class="page hidden" aria-label="Greenhouse management">
+      <div class="greenhouses-header">
+        <div class="page-section-header">
+          <h2>My Greenhouses</h2>
+          <p>Register and manage your greenhouse units</p>
+        </div>
+        <button class="btn-primary" onclick="openAddGhModal()" aria-label="Add new greenhouse">
+          <span>＋</span> Add Greenhouse
+        </button>
+      </div>
+      <div class="greenhouses-grid" id="greenhouses-grid" aria-live="polite">
+        <!-- Injected by JS -->
+      </div>
+
+      <!-- Add Greenhouse Modal -->
+      <div id="gh-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gh-modal-title" onclick="closeGhModal(event)">
+        <div class="modal-card" id="gh-modal-card">
+          <div class="modal-header">
+            <h2 class="modal-title" id="gh-modal-title">🏡 Add Greenhouse</h2>
+            <button class="modal-close" onclick="closeGhModal()" aria-label="Close modal">✕</button>
+          </div>
+          <form id="gh-form" onsubmit="handleAddGh(event)" novalidate>
+            <div style="display:flex;flex-direction:column;gap:16px;">
+              <div class="field-group">
+                <label for="gh-name">Greenhouse Name</label>
+                <input type="text" id="gh-name" placeholder="My Greenhouse" required aria-required="true" autocomplete="off" />
+              </div>
+              <div class="field-group">
+                <label for="gh-serial">Serial Number</label>
+                <input type="text" id="gh-serial" placeholder="GH-001" required aria-required="true" autocomplete="off" />
+                <small class="field-hint">📌 Found on the sticker of your ESP32 device.</small>
+              </div>
+              <div id="gh-modal-error" class="form-error hidden" role="alert"></div>
+              <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeGhModal()">Cancel</button>
+                <button type="submit" id="gh-submit-btn" class="btn-primary">
+                  <span class="btn-text">Add Greenhouse</span>
+                  <span class="btn-loader hidden" aria-hidden="true">⟳</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════
+         PAGE: Analytics
+    ══════════════════════ -->
+    <section id="page-analytics" class="page hidden" aria-label="Analytics">
+
+      <!-- No greenhouse selected -->
+      <div id="analytics-no-data" class="analytics-empty-state glass card">
+        <div class="analytics-empty-icon" aria-hidden="true">📈</div>
+        <h3>No Greenhouse Selected</h3>
+        <p class="muted">Select a greenhouse from the top bar to view its analytics.</p>
+        <button class="btn-primary" onclick="navigateTo('greenhouses')">Add a Greenhouse</button>
+      </div>
+
+      <!-- Analytics content -->
+      <div id="analytics-content" class="hidden">
+        <!-- Range selector -->
+        <div class="analytics-range-bar">
+          <label for="analytics-limit">Data points:</label>
+          <select id="analytics-limit" class="compact-select" onchange="loadAnalytics()" aria-label="Number of data points">
+            <option value="50">Last 50</option>
+            <option value="100">Last 100</option>
+            <option value="200" selected>Last 200</option>
+            <option value="500">Last 500</option>
+          </select>
+          <button class="btn-secondary" onclick="loadAnalytics()" style="padding:7px 14px;font-size:.83rem;">↻ Refresh</button>
+        </div>
+
+        <!-- Stat Summary -->
+        <div class="analytics-stat-grid">
+          <div class="analytics-stat-card" style="--stat-color:#f59e0b;">
+            <div class="stat-card-header">
+              <span class="stat-icon" aria-hidden="true">🌡️</span>
+              <span class="stat-label">Temperature °C</span>
+            </div>
+            <div class="stat-values">
+              <div class="stat-value-item"><span class="stat-key">Min</span><span class="stat-val" id="stat-temp-min">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Avg</span><span class="stat-val stat-val-accent" id="stat-temp-avg">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Max</span><span class="stat-val" id="stat-temp-max">—</span></div>
+            </div>
+          </div>
+          <div class="analytics-stat-card" style="--stat-color:#3b82f6;">
+            <div class="stat-card-header">
+              <span class="stat-icon" aria-hidden="true">💧</span>
+              <span class="stat-label">Humidity %</span>
+            </div>
+            <div class="stat-values">
+              <div class="stat-value-item"><span class="stat-key">Min</span><span class="stat-val" id="stat-humidity-min">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Avg</span><span class="stat-val stat-val-accent" id="stat-humidity-avg">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Max</span><span class="stat-val" id="stat-humidity-max">—</span></div>
+            </div>
+          </div>
+          <div class="analytics-stat-card" style="--stat-color:#22c55e;">
+            <div class="stat-card-header">
+              <span class="stat-icon" aria-hidden="true">🪴</span>
+              <span class="stat-label">Soil Moisture %</span>
+            </div>
+            <div class="stat-values">
+              <div class="stat-value-item"><span class="stat-key">Min</span><span class="stat-val" id="stat-soil-min">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Avg</span><span class="stat-val stat-val-accent" id="stat-soil-avg">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Max</span><span class="stat-val" id="stat-soil-max">—</span></div>
+            </div>
+          </div>
+          <div class="analytics-stat-card" style="--stat-color:#a855f7;">
+            <div class="stat-card-header">
+              <span class="stat-icon" aria-hidden="true">☀️</span>
+              <span class="stat-label">Light Intensity lx</span>
+            </div>
+            <div class="stat-values">
+              <div class="stat-value-item"><span class="stat-key">Min</span><span class="stat-val" id="stat-light-min">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Avg</span><span class="stat-val stat-val-accent" id="stat-light-avg">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Max</span><span class="stat-val" id="stat-light-max">—</span></div>
+            </div>
+          </div>
+          <div class="analytics-stat-card" style="--stat-color:#14b8a6;">
+            <div class="stat-card-header">
+              <span class="stat-icon" aria-hidden="true">🔋</span>
+              <span class="stat-label">Battery V</span>
+            </div>
+            <div class="stat-values">
+              <div class="stat-value-item"><span class="stat-key">Min</span><span class="stat-val" id="stat-battery-min">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Avg</span><span class="stat-val stat-val-accent" id="stat-battery-avg">—</span></div>
+              <div class="stat-value-item"><span class="stat-key">Max</span><span class="stat-val" id="stat-battery-max">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- No data yet -->
+        <div id="analytics-empty" class="hidden empty-state glass" style="margin-bottom:20px;">
+          <div class="empty-state-icon" aria-hidden="true">📭</div>
+          <h3>No Sensor Data Yet</h3>
+          <p>Once your ESP32 starts sending data, charts will appear here.</p>
+        </div>
+
+        <!-- Charts -->
+        <div class="analytics-charts-grid" id="analytics-charts-grid">
+          <div class="analytics-chart-card">
+            <div class="card-title">
+              <span class="card-title-icon" aria-hidden="true">🌡️</span>
+              Temperature &amp; Humidity Over Time
+            </div>
+            <div class="chart-wrap"><canvas id="chart-temp-humidity" aria-label="Temperature and humidity chart"></canvas></div>
+          </div>
+          <div class="analytics-chart-card">
+            <div class="card-title">
+              <span class="card-title-icon" aria-hidden="true">🪴</span>
+              Soil Moisture Over Time
+            </div>
+            <div class="chart-wrap"><canvas id="chart-soil" aria-label="Soil moisture chart"></canvas></div>
+          </div>
+          <div class="analytics-chart-card">
+            <div class="card-title">
+              <span class="card-title-icon" aria-hidden="true">☀️</span>
+              Light Intensity
+            </div>
+            <div class="chart-wrap"><canvas id="chart-light" aria-label="Light intensity chart"></canvas></div>
+          </div>
+          <div class="analytics-chart-card">
+            <div class="card-title">
+              <span class="card-title-icon" aria-hidden="true">🔋</span>
+              Battery Voltage Over Time
+            </div>
+            <div class="chart-wrap"><canvas id="chart-battery" aria-label="Battery voltage chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════
+         PAGE: Profile
+    ══════════════════════ -->
+    <section id="page-profile" class="page hidden" aria-label="Profile settings">
+      <div style="max-width:760px;">
+        <div class="page-section-header">
+          <h2>Profile &amp; Settings</h2>
+          <p>Manage your account information</p>
+        </div>
+
+        <div class="profile-grid">
+          <!-- Profile info card -->
+          <div class="profile-card" style="grid-column: 1 / -1;">
+            <div class="profile-avatar-wrap">
+              <div class="profile-avatar-large" id="profile-avatar-large">?</div>
+              <div class="profile-user-info">
+                <div class="user-name-large" id="profile-name-display">—</div>
+                <div class="user-since" id="profile-email-display" style="color:var(--clr-text3);margin-top:3px;">—</div>
+                <div id="profile-role-badge" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.22);border-radius:20px;font-size:.75rem;font-weight:700;color:var(--clr-green);">
+                  🌿 Farmer
+                </div>
+              </div>
+            </div>
+
+            <form id="profile-form" onsubmit="handleProfileUpdate(event)" novalidate>
+              <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="field-row">
+                  <div class="field-group">
+                    <label for="profile-first">First Name</label>
+                    <input type="text" id="profile-first" placeholder="John" autocomplete="given-name" />
+                  </div>
+                  <div class="field-group">
+                    <label for="profile-last">Last Name</label>
+                    <input type="text" id="profile-last" placeholder="Doe" autocomplete="family-name" />
+                  </div>
+                </div>
+                <div class="field-group">
+                  <label for="profile-email">Email</label>
+                  <input type="email" id="profile-email" placeholder="you@example.com" autocomplete="email" />
+                </div>
+                <div class="field-group">
+                  <label for="profile-phone">Phone</label>
+                  <input type="tel" id="profile-phone" placeholder="+959123456789" autocomplete="tel" />
+                </div>
+                <div id="profile-error" class="form-error hidden" role="alert"></div>
+                <div id="profile-success" class="ctrl-feedback success hidden" role="status">✅ Profile updated successfully!</div>
+                <div style="display:flex;justify-content:flex-end;">
+                  <button type="submit" id="profile-save-btn" class="btn-primary" style="min-width:140px;">
+                    <span class="btn-text">Save Changes</span>
+                    <span class="btn-loader hidden" aria-hidden="true">⟳</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- Stats card -->
+          <div class="profile-card">
+            <div class="card-title">
+              <span class="card-title-icon">📊</span>
+              Account Stats
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--clr-surface2);border-radius:var(--radius-sm);border:1px solid var(--clr-border);">
+                <span style="font-size:.83rem;color:var(--clr-text3);">🏡 Greenhouses</span>
+                <strong id="profile-gh-count" style="font-family:'Outfit',sans-serif;font-size:1.1rem;">—</strong>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--clr-surface2);border-radius:var(--radius-sm);border:1px solid var(--clr-border);">
+                <span style="font-size:.83rem;color:var(--clr-text3);">📡 Total Readings</span>
+                <strong id="profile-reading-count" style="font-family:'Outfit',sans-serif;font-size:1.1rem;">—</strong>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--clr-surface2);border-radius:var(--radius-sm);border:1px solid var(--clr-border);">
+                <span style="font-size:.83rem;color:var(--clr-text3);">🗓️ Schedules</span>
+                <strong id="profile-sched-count" style="font-family:'Outfit',sans-serif;font-size:1.1rem;">—</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- App settings card -->
+          <div class="profile-card">
+            <div class="card-title">
+              <span class="card-title-icon">⚙️</span>
+              App Settings
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--clr-surface2);border-radius:var(--radius-sm);border:1px solid var(--clr-border);">
+                <div>
+                  <div style="font-size:.85rem;font-weight:600;margin-bottom:2px;">Dark Mode</div>
+                  <div style="font-size:.75rem;color:var(--clr-text3);">Toggle app theme</div>
+                </div>
+                <button class="btn-secondary" onclick="toggleTheme()" id="settings-theme-btn" style="font-size:.82rem;padding:7px 14px;">🌙 Toggle</button>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--clr-surface2);border-radius:var(--radius-sm);border:1px solid var(--clr-border);">
+                <div>
+                  <div style="font-size:.85rem;font-weight:600;margin-bottom:2px;">Auto-Refresh</div>
+                  <div style="font-size:.75rem;color:var(--clr-text3);">Updates every 15 seconds</div>
+                </div>
+                <span style="font-size:.78rem;color:var(--clr-green);background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.22);padding:4px 10px;border-radius:20px;font-weight:700;">ON</span>
+              </div>
+              <div style="padding:12px 14px;background:var(--clr-surface2);border-radius:var(--radius-sm);border:1px solid var(--clr-border);">
+                <div style="font-size:.85rem;font-weight:600;margin-bottom:6px;">API Base URL</div>
+                <div style="display:flex;gap:8px;">
+                  <input type="url" id="api-base-input" placeholder="Auto (same host as this page)" style="flex:1;padding:8px 12px;background:var(--input-bg);border:1px solid var(--clr-border2);border-radius:var(--radius-sm);color:var(--clr-text);font-size:.82rem;font-family:inherit;outline:none;" />
+                  <button class="btn-secondary" onclick="applyApiBase()" style="padding:8px 14px;font-size:.82rem;">Apply</button>
+                </div>
+                <small class="field-hint" style="margin-top:5px;display:block;">Current: <span id="current-api-base" style="font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--clr-green);">—</span></small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Mobile drawer backdrop -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+</div>
+
+<!-- Toast notifications -->
+<div id="toast-container" role="region" aria-live="assertive" aria-atomic="true"></div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
