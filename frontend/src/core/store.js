@@ -5,6 +5,7 @@ export const state = {
   page: 'overview',
   schedules: [],
   sensorRows: [],
+  latestReading: null,    // denormalized latest reading with age_seconds, is_stale
   deviceState: null,
 };
 

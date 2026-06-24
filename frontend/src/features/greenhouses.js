@@ -1,7 +1,7 @@
 import { $, escapeHtml, formatDateTime, formatNumber } from '../core/dom.js';
 import {
   createGreenhouse, deleteGreenhouse, getDeviceState,
-  getSensors, listGreenhouses, listSchedules,
+  getSensors, getLatestSensors, listGreenhouses, listSchedules,
   sendControl, createSchedule, deleteSchedule,
   getResolvedApiBase,
 } from '../core/api.js';
@@ -19,6 +19,15 @@ function titleCase(value, fallback = 'Unknown') {
   if (value == null || value === '') return fallback;
   const str = String(value);
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ── Staleness helper ──
+function formatAge(ageSeconds) {
+  if (ageSeconds == null || ageSeconds < 0) return '';
+  if (ageSeconds < 60) return 'just now';
+  if (ageSeconds < 3600) return `${Math.floor(ageSeconds / 60)} min ago`;
+  if (ageSeconds < 86400) return `${Math.floor(ageSeconds / 3600)}h ago`;
+  return `${Math.floor(ageSeconds / 86400)}d ago`;
 }
 
 // ── Chart instances ──
@@ -70,6 +79,8 @@ function renderOverviewStatsBar() {
   const gh = getSelectedGreenhouse();
   if (!gh) { bar.innerHTML = ''; return; }
   const latest = state.sensorRows[0] || {};
+  const isStale = state.latestReading?.is_stale;
+  const ageText = formatAge(state.latestReading?.age_seconds);
   const pills = [
     { icon: '🏡', label: 'Greenhouse', value: gh.name, dot: gh.status === 'active' ? '#22c55e' : '#f59e0b' },
     { icon: '📡', label: 'Readings', value: state.sensorRows.length, dot: null },
@@ -84,7 +95,13 @@ function renderOverviewStatsBar() {
       <span style="color:var(--clr-text3);font-size:.75rem;">${p.label}:</span>
       <strong>${escapeHtml(String(p.value))}</strong>
     </div>
-  `).join('');
+  `).join('') + (isStale ? `
+    <div class="stat-pill" style="border:1px solid rgba(245,158,11,.4);background:rgba(245,158,11,.06);">
+      <span>⏳</span>
+      <span style="color:var(--clr-text3);font-size:.75rem;">Last update:</span>
+      <strong style="color:#f59e0b;">${escapeHtml(ageText || 'unknown')}</strong>
+    </div>
+  ` : '');
 }
 
 // ── Sensor card config ──
@@ -233,6 +250,8 @@ function renderSensorCards() {
   }
 
   const latest = state.sensorRows[0] || {};
+  const isStale = state.latestReading?.is_stale;
+  const ageText = formatAge(state.latestReading?.age_seconds);
 
   container.innerHTML = SENSOR_CARD_CONFIG.map(({ key, label, unit, icon, color, color2, accent, max }) => {
     const rawVal  = latest[key];
@@ -248,6 +267,7 @@ function renderSensorCards() {
         <div class="sensor-card-circle" style="background:${color};"></div>
         <div class="sensor-card-header">
           <span class="sensor-card-icon" aria-hidden="true">${icon}</span>
+          ${isStale ? `<span class="sensor-card-stale" title="Data from ${ageText} — backend may have been sleeping">⏳</span>` : ''}
         </div>
         <div class="sensor-card-label">${escapeHtml(label)}</div>
         <div class="sensor-card-value">${escapeHtml(display)}<span class="sensor-card-unit"> ${escapeHtml(unit)}</span></div>
@@ -481,13 +501,18 @@ export async function refreshSelectedData() {
   }
 
   const limit = $('sensor-limit')?.value || 50;
-  const [sensors, deviceState, schedules] = await Promise.all([
+  const [sensors, latest, deviceState, schedules] = await Promise.all([
     getSensors(greenhouse.id, limit).catch(() => []),
+    getLatestSensors(greenhouse.id).catch(() => null),
     getDeviceState(greenhouse.id).catch(() => null),
     listSchedules(greenhouse.id).catch(() => []),
   ]);
 
   state.sensorRows  = normalizeSensorResponse(sensors);
+  if (!state.sensorRows.length && latest) {
+    state.sensorRows = [latest];
+  }
+  state.latestReading = latest;
   state.deviceState = deviceState;
   state.schedules   = Array.isArray(schedules) ? schedules : [];
   renderAllData();

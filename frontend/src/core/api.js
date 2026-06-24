@@ -69,6 +69,7 @@ export const listGreenhouses = () => request('/api/v1/greenhouses/');
 export const createGreenhouse = (payload) => request('/api/v1/greenhouses/', { method: 'POST', body: JSON.stringify(payload) });
 export const deleteGreenhouse = (id) => request(`/api/v1/greenhouses/${id}/`, { method: 'DELETE' });
 export const getSensors = (id, limit = 50) => request(`/api/v1/greenhouses/${id}/sensors/?limit=${encodeURIComponent(limit)}`);
+export const getLatestSensors = (id) => request(`/api/v1/greenhouses/${id}/sensors/latest/`);
 export const getDeviceState = (id) => request(`/api/v1/greenhouses/${id}/state/`);
 export const sendControl = (id, device, action) => request(`/api/v1/greenhouses/${id}/control/`, { method: 'PATCH', body: JSON.stringify({ device, action }) });
 export const listSchedules = (id) => request(`/api/v1/greenhouses/${id}/schedules/`);

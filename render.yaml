@@ -40,7 +40,23 @@ services:
         value: "true"
       - key: MQTT_ENABLED
         value: "true"
-      # Cloud MQTT broker. SET THESE IN THE RENDER DASHBOARD (or edit here):
+      # ── MQTT BROKER ───────────────────────────────────────────────
+      # Render's free plan CANNOT run its own MQTT broker, so point
+      # MQTT_BROKER at a broker that is reachable from Render:
+      #
+      #   • Your own local/Raspberry-Pi broker on a LAN exposed via a
+      #     public IP / dynamic DNS + port-forwarded 1883 (or 8883 + TLS).
+      #   • A free-tier cloud broker: HiveMQ Cloud, EMQX Cloud, or a
+      #     Mosquitto instance on another free host (fly.io, etc.).
+      #
+      # ESP32 devices connect to the SAME broker. Schedules are pushed ONCE
+      # (retain=True) and executed on the ESP from flash, so they keep
+      # running while the Render backend is asleep (free-tier spin-down).
+      # The persistent in-process session (clean_session=False, QoS 1) also
+      # queues sensor messages at the broker during sleep and redelivers
+      # them on wake — so no readings are lost.
+      #
+      # SET MQTT_BROKER / MQTT_USERNAME / MQTT_PASSWORD IN THE DASHBOARD:
       - key: MQTT_BROKER
         sync: false
       - key: MQTT_PORT
@@ -53,6 +69,9 @@ services:
         sync: false
       - key: MQTT_KEEPALIVE
         value: "60"
+      # Schedules run on ESP flash; server only pushes the list once.
+      - key: SERVER_SCHEDULE_DISPATCH
+        value: "false"
 
   # ───────────────────────────────────────────────────────────────────────
   # Free PostgreSQL. NOTE: Render's free Postgres expires 90 days after
