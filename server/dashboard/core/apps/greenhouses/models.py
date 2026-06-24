@@ -78,6 +78,36 @@ class SensorData(models.Model):
         return f'[{self.timestamp}] {self.greenhouse.serial_number}'
 
 
+class LatestSensorReading(models.Model):
+    """
+    Denormalized latest sensor values per greenhouse.
+
+    Updated on every MQTT ingest so the API can return the most recent
+    reading immediately after a Render spin-down wake, without scanning
+    the time-series table.
+    """
+    greenhouse = models.OneToOneField(
+        Greenhouse,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name='latest_reading',
+    )
+    timestamp = models.DateTimeField()
+    temperature = models.FloatField()
+    humidity = models.FloatField()
+    soil_moisture = models.FloatField(null=True, blank=True)
+    light_intensity = models.FloatField(null=True, blank=True)
+    battery = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'greenhouses_latestsensorreading'
+        verbose_name = 'Latest Sensor Reading'
+        verbose_name_plural = 'Latest Sensor Readings'
+
+    def __str__(self):
+        return f'Latest [{self.timestamp}] {self.greenhouse.serial_number}'
+
+
 class DeviceState(models.Model):
     """
     Current actuator state of a greenhouse (1:1).

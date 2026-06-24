@@ -6,6 +6,7 @@ import os
 import socket
 from pathlib import Path
 from datetime import timedelta
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 _default_frontend = BASE_DIR.parent.parent / 'frontend'
@@ -35,6 +36,13 @@ _load_env_file()
 # ------------------------------------------------------------------
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 def _build_allowed_hosts():
     raw = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1')
@@ -84,6 +92,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'core.middleware.DevLanHostMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -113,18 +122,51 @@ TEMPLATES = [
 WSGI_APPLICATION = 'core.wsgi.application'
 
 # ------------------------------------------------------------------
-# Database – PostgreSQL
+# Database
 # ------------------------------------------------------------------
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'greenhouse'),
-        'USER': os.environ.get('DB_USER', 'greenhouse_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'greenhouse_pass'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-    }
-}
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL:
+    parsed_db = urlparse(DATABASE_URL)
+    if parsed_db.scheme.startswith('postgres'):
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': parsed_db.path.lstrip('/'),
+                'USER': parsed_db.username or '',
+                'PASSWORD': parsed_db.password or '',
+                'HOST': parsed_db.hostname or '',
+                'PORT': str(parsed_db.port or 5432),
+                'CONN_MAX_AGE': 60,
+            }
+        }
+    elif parsed_db.scheme == 'sqlite':
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': parsed_db.path or BASE_DIR / 'db.sqlite3',
+            }
+        }
+    else:
+        raise RuntimeError(f'Unsupported DATABASE_URL scheme: {parsed_db.scheme}')
+else:
+    if os.environ.get('RENDER') == 'true' or not os.environ.get('DB_HOST'):
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
+    else:
+        DATABASES = {
+            'default': {
+                'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
+                'NAME': os.environ.get('DB_NAME', 'greenhouse'),
+                'USER': os.environ.get('DB_USER', 'greenhouse_user'),
+                'PASSWORD': os.environ.get('DB_PASSWORD', 'greenhouse_pass'),
+                'HOST': os.environ.get('DB_HOST', 'localhost'),
+                'PORT': os.environ.get('DB_PORT', '5432'),
+            }
+        }
 
 # ------------------------------------------------------------------
 # Custom user model
@@ -167,27 +209,42 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173',
 ).split(',')
 
-# In development allow all – set to False in production and configure above
+# In development allow all. In production rely on explicit origins.
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 
 # ------------------------------------------------------------------
 # MQTT
 # ------------------------------------------------------------------
+MQTT_ENABLED = _env_bool('MQTT_ENABLED', True if os.environ.get('RENDER') == 'true' else DEBUG)
 MQTT_BROKER = os.environ.get('MQTT_BROKER', 'localhost')
 MQTT_PORT = int(os.environ.get('MQTT_PORT', 1883))
+# When false (default on Render in-process worker), schedules run on ESP flash only.
+SERVER_SCHEDULE_DISPATCH = _env_bool(
+    'SERVER_SCHEDULE_DISPATCH',
+    not _env_bool('MQTT_WORKER_IN_PROCESS', False),
+)
 
 # ------------------------------------------------------------------
 # Redis
 # ------------------------------------------------------------------
 REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+REDIS_URL = os.environ.get('REDIS_URL')
 
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1',
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'smart-greenhouse',
+        }
+    }
 
 # ------------------------------------------------------------------
 # Password validation
@@ -213,6 +270,14 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [FRONTEND_DIR]
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

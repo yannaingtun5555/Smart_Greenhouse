@@ -23,24 +23,14 @@ services:
       - greenhouse_network
 
   # ─────────────────────────────────────────────
-  # Mosquitto MQTT broker
+  # CoreFlux MQTT broker
   # ─────────────────────────────────────────────
   mqtt:
-    image: eclipse-mosquitto:2.0
+    image: coreflux/coreflux-mqtt-broker
     container_name: greenhouse_mqtt
     restart: always
     ports:
       - "1883:1883"
-      - "127.0.0.1:9001:9001"
-    volumes:
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
-      - ./mosquitto/config:/mosquitto/config:ro
-    healthcheck:
-      test: ["CMD", "pgrep", "mosquitto"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
     networks:
       - greenhouse_network
 
@@ -84,7 +74,7 @@ services:
       redis:
         condition: service_healthy
       mqtt:
-        condition: service_healthy
+        condition: service_started
     environment:
       # Django
       SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-change-me}
@@ -100,6 +90,10 @@ services:
       # MQTT
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_USE_TLS: ${MQTT_USE_TLS:-false}
+      MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
       # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -116,11 +110,13 @@ services:
     build: ./mqtt
     container_name: greenhouse_mqtt_worker
     restart: always
+    volumes:
+      - ./mqtt/mqtt_worker.py:/app/mqtt_worker.py:ro
     depends_on:
       db:
         condition: service_healthy
       mqtt:
-        condition: service_healthy
+        condition: service_started
     environment:
       # Database
       DB_NAME: ${DB_NAME:-greenhouse}
@@ -131,13 +127,15 @@ services:
       # MQTT
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_USE_TLS: ${MQTT_USE_TLS:-false}
+      MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
     networks:
       - greenhouse_network
 
 volumes:
   postgres_data:
-  mosquitto_data:
-  mosquitto_log:
   static_volume:
 
 networks:
