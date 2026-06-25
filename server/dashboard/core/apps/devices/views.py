@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.apps.greenhouses.models import Greenhouse, DeviceState
+from core.apps.greenhouses.utils import mqtt_push_schedules
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,10 @@ class DeviceRegisterView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Idempotent: if token already issued, just return it
+        # Idempotent: if token already issued, return it and re-push schedules
         if greenhouse.api_token:
             logger.info('Device register: token already exists for %s', serial_number)
+            mqtt_push_schedules(greenhouse)
             return Response({'api_token': greenhouse.api_token})
 
         # Generate a secure 64-char hex token
@@ -68,6 +70,9 @@ class DeviceRegisterView(APIView):
 
         # Ensure a DeviceState row exists
         DeviceState.objects.get_or_create(greenhouse=greenhouse)
+
+        # Push current schedules to ESP flash (retained MQTT message)
+        mqtt_push_schedules(greenhouse)
 
         logger.info('Device register: token issued for %s', serial_number)
         return Response({'api_token': token}, status=status.HTTP_201_CREATED)

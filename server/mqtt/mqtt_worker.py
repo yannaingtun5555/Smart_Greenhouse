@@ -66,6 +66,10 @@ DB_PORT     = os.environ.get('DB_PORT', '5432')
 
 MQTT_BROKER = os.environ['MQTT_BROKER']
 MQTT_PORT   = int(os.environ.get('MQTT_PORT', 1883))
+MQTT_USERNAME = os.environ.get('MQTT_USERNAME')
+MQTT_PASSWORD = os.environ.get('MQTT_PASSWORD')
+MQTT_USE_TLS = os.environ.get('MQTT_USE_TLS', 'false').lower() in {'1', 'true', 'yes', 'on'}
+MQTT_KEEPALIVE = int(os.environ.get('MQTT_KEEPALIVE', 60))
 
 # How often to refresh the token cache from DB (seconds)
 TOKEN_CACHE_REFRESH_INTERVAL = 60
@@ -197,7 +201,7 @@ def get_greenhouse_id(serial: str) -> int | None:
 
 
 def insert_sensor_data(greenhouse_id: int, payload: dict):
-    """Insert a SensorData row."""
+    """Insert a SensorData row and upsert the latest-reading cache."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -207,6 +211,29 @@ def insert_sensor_data(greenhouse_id: int, payload: dict):
                   (greenhouse_id, temperature, humidity, soil_moisture,
                    light_intensity, battery, timestamp)
                 VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                """,
+                (
+                    greenhouse_id,
+                    payload['temperature'],
+                    payload['humidity'],
+                    payload.get('soil_moisture'),
+                    payload.get('light_intensity'),
+                    payload.get('battery'),
+                ),
+            )
+            cur.execute(
+                """
+                INSERT INTO greenhouses_latestsensorreading
+                  (greenhouse_id, timestamp, temperature, humidity,
+                   soil_moisture, light_intensity, battery)
+                VALUES (%s, NOW(), %s, %s, %s, %s, %s)
+                ON CONFLICT (greenhouse_id) DO UPDATE SET
+                  timestamp = EXCLUDED.timestamp,
+                  temperature = EXCLUDED.temperature,
+                  humidity = EXCLUDED.humidity,
+                  soil_moisture = EXCLUDED.soil_moisture,
+                  light_intensity = EXCLUDED.light_intensity,
+                  battery = EXCLUDED.battery
                 """,
                 (
                     greenhouse_id,
@@ -536,12 +563,26 @@ def main():
     try:
         # paho-mqtt >= 2.0 supports CallbackAPIVersion
         from paho.mqtt.enums import CallbackAPIVersion
-        client = mqtt.Client(client_id=client_id, callback_api_version=CallbackAPIVersion.VERSION2, clean_session=True)
+        client = mqtt.Client(
+            client_id=client_id,
+            callback_api_version=CallbackAPIVersion.VERSION2,
+            clean_session=True,
+            protocol=mqtt.MQTTv311,
+        )
     except ImportError:
-        client = mqtt.Client(client_id=client_id, clean_session=True)
+        client = mqtt.Client(client_id=client_id, clean_session=True, protocol=mqtt.MQTTv311)
     client.on_connect    = on_connect
     client.on_disconnect = on_disconnect
     client.on_message    = on_message
+    client.enable_logger(logger)
+
+    if MQTT_USERNAME:
+        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        logger.info('Configured MQTT username authentication')
+
+    if MQTT_USE_TLS:
+        client.tls_set()
+        logger.info('Configured MQTT TLS')
 
     # 4. Start background threads
     threading.Thread(target=token_cache_refresher, daemon=True).start()
@@ -556,7 +597,7 @@ def main():
     connected = False
     while not connected:
         try:
-            client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+            client.connect(MQTT_BROKER, MQTT_PORT, keepalive=MQTT_KEEPALIVE)
             connected = True
         except Exception as exc:
             logger.warning('MQTT broker not ready: %s – retrying in 5s', exc)

@@ -6,11 +6,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Greenhouse, SensorData, DeviceState
+from .models import Greenhouse, SensorData, DeviceState, LatestSensorReading
 from .serializers import (
     GreenhouseSerializer,
     GreenhouseCreateSerializer,
     SensorDataSerializer,
+    LatestSensorReadingSerializer,
     DeviceStateSerializer,
     ControlCommandSerializer,
 )
@@ -115,6 +116,32 @@ class SensorDataListView(generics.ListAPIView):
         limit = int(self.request.query_params.get('limit', 50))
         limit = min(limit, 500)  # cap at 500
         return SensorData.objects.filter(greenhouse=gh).order_by('-timestamp')[:limit]
+
+
+class LatestSensorReadingView(APIView):
+    """
+    GET /api/v1/greenhouses/{id}/sensors/latest/
+
+    Returns the most recent sensor reading for the greenhouse. This is
+    updated on every MQTT ingest and is available immediately after a
+    Render spin-down wake, even before queued MQTT backlog is processed.
+
+    Response includes ``age_seconds`` (how old the reading is) and
+    ``is_stale`` (True if older than 5 minutes) so the frontend can
+    display a "last seen X min ago" indicator when the backend was sleeping.
+  """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        gh = get_owned_greenhouse(request.user, pk)
+        try:
+            reading = gh.latest_reading
+        except LatestSensorReading.DoesNotExist:
+            return Response(
+                {'detail': 'No sensor readings yet.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(LatestSensorReadingSerializer(reading).data)
 
 
 class DeviceStateView(APIView):

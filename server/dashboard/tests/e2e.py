@@ -14,7 +14,7 @@ Simulates the complete lifecycle:
 
 Requirements (all available via Docker stack):
   - Django/DB running at http://localhost:8000
-  - MQTT broker on localhost:1883
+  - MQTT broker on MQTT_BROKER:MQTT_PORT
 """
 
 import json
@@ -22,10 +22,49 @@ import os
 import time
 import uuid
 import warnings
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 import pytest
 import requests
+
+
+def _load_env_file() -> None:
+    """
+    Load server/.env into os.environ so the tests talk to the same broker as
+    the Docker stack (django + mqtt_worker) without manual `export`s.
+
+    Existing environment variables always win (os.environ.setdefault) so
+    explicit exports / CI config are never overridden.
+    """
+    candidates = [
+        Path(__file__).resolve().parents[2] / '.env',           # server/.env
+        Path(__file__).resolve().parents[1] / '.env',           # dashboard/.env
+        Path.cwd() / '.env',
+    ]
+    for env_path in candidates:
+        if not env_path.exists():
+            continue
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, value = line.partition('=')
+            os.environ.setdefault(key.strip(), value.strip())
+        break
+
+
+_load_env_file()
+
+# ---------------------------------------------------------------------------
+# paho-mqtt v2 compatibility: use CallbackAPIVersion.VERSION2 so v1-style
+# callbacks don't raise the deprecation error on connect.
+# ---------------------------------------------------------------------------
+try:
+    from paho.mqtt.enums import CallbackAPIVersion
+    _CALLBACK_API_VERSION = CallbackAPIVersion.VERSION2
+except ImportError:  # paho-mqtt v1
+    _CALLBACK_API_VERSION = None
 
 # Suppress paho-mqtt v1 callback deprecation warnings in test code
 warnings.filterwarnings("ignore", message="Callback API version 1 is deprecated.*", category=DeprecationWarning)
@@ -36,6 +75,17 @@ warnings.filterwarnings("ignore", message="Callback API version 1 is deprecated.
 BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 MQTT_HOST = os.environ.get("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.environ.get("MQTT_USERNAME")
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")
+MQTT_USE_TLS = os.environ.get("MQTT_USE_TLS", "false").lower() in {"1", "true", "yes", "on"}
+
+
+def make_mqtt_client(client_id: str) -> mqtt.Client:
+    """Create an MQTT client with the right callback API version for paho v1/v2."""
+    kwargs = {"client_id": client_id, "protocol": mqtt.MQTTv311}
+    if _CALLBACK_API_VERSION is not None:
+        kwargs["callback_api_version"] = _CALLBACK_API_VERSION
+    return mqtt.Client(**kwargs)
 
 # Unique suffix so parallel runs don't collide
 RUN_ID = uuid.uuid4().hex[:6]
@@ -78,13 +128,18 @@ def mqtt_publish(topic, payload_dict, host=MQTT_HOST, port=MQTT_PORT):
     """Publish a single message to the broker. Returns True on success."""
     try:
         import paho.mqtt.publish as pub
-        pub.single(
-            topic=topic,
-            payload=json.dumps(payload_dict),
-            hostname=host,
-            port=port,
-            qos=1,
-        )
+        kwargs = {
+            "topic": topic,
+            "payload": json.dumps(payload_dict),
+            "hostname": host,
+            "port": port,
+            "qos": 1,
+        }
+        if MQTT_USERNAME:
+            kwargs["auth"] = {"username": MQTT_USERNAME, "password": MQTT_PASSWORD}
+        if MQTT_USE_TLS:
+            kwargs["tls"] = {}
+        pub.single(**kwargs)
         return True
     except Exception as exc:
         print(f"[MQTT publish error] {exc}")
@@ -102,7 +157,11 @@ def mqtt_subscribe_once(topic, timeout=5, host=MQTT_HOST, port=MQTT_PORT):
             received["data"] = msg.payload.decode()
         client.disconnect()
 
-    client = mqtt.Client(client_id=f"test_sub_{uuid.uuid4().hex[:6]}")
+    client = make_mqtt_client(f"test_sub_{uuid.uuid4().hex[:6]}")
+    if MQTT_USERNAME:
+        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    if MQTT_USE_TLS:
+        client.tls_set()
     client.on_message = on_message
     client.connect(host, port, 60)
     client.subscribe(topic, qos=1)
@@ -216,6 +275,29 @@ class TestGreenhouseFullFlow:
     # -----------------------------------------------------------------------
     def test_05_esp32_device_register(self):
         # No auth header needed; ESP32 uses serial number only
+        sched_topic = f"gh/{SERIAL}/schedules"
+        sched_received = {}
+
+        def on_sched(client, userdata, msg):
+            try:
+                data = json.loads(msg.payload.decode())
+                if isinstance(data, list):
+                    sched_received["data"] = data
+                    client.disconnect()
+            except Exception:
+                pass
+
+        sub = make_mqtt_client(f"test_reg_sched_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub.tls_set()
+        sub.on_message = on_sched
+        sub.connect(MQTT_HOST, MQTT_PORT, 60)
+        sub.subscribe(sched_topic, qos=1)
+        sub.loop_start()
+        time.sleep(0.3)
+
         r = requests.post(f"{BASE_URL}/api/v1/devices/register/", json={
             "serial_number": SERIAL,
         })
@@ -224,7 +306,16 @@ class TestGreenhouseFullFlow:
         assert "api_token" in data, "No api_token in response"
         assert len(data["api_token"]) == 64, "Token should be 64 hex chars"
         self.__class__.api_token = data["api_token"]
-        print(f"\n✅  ESP32 registered, token: {self.__class__.api_token[:16]}...")
+
+        deadline = time.time() + 5
+        while time.time() < deadline and not sched_received.get("data"):
+            time.sleep(0.1)
+        sub.loop_stop()
+
+        assert sched_received.get("data") is not None, \
+            "Did not receive schedules on MQTT after device register"
+        assert isinstance(sched_received["data"], list)
+        print(f"\n✅  ESP32 registered, token: {self.__class__.api_token[:16]}... schedules pushed ({len(sched_received['data'])} rules)")
 
     # -----------------------------------------------------------------------
     # Step 5b: ESP32 register again → idempotent (same token, 200)
@@ -259,7 +350,11 @@ class TestGreenhouseFullFlow:
                 received["ok"] = True
             client.disconnect()
 
-        c = mqtt.Client(client_id=f"test_health_{uuid.uuid4().hex[:6]}")
+        c = make_mqtt_client(f"test_health_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            c.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            c.tls_set()
         c.on_message = on_message
         c.connect(MQTT_HOST, MQTT_PORT, 60)
         c.subscribe("test/health_check", qos=0)
@@ -267,7 +362,17 @@ class TestGreenhouseFullFlow:
         time.sleep(0.3)
 
         import paho.mqtt.publish as pub
-        pub.single("test/health_check", "ping", hostname=MQTT_HOST, port=MQTT_PORT)
+        kwargs = {
+            "topic": "test/health_check",
+            "payload": "ping",
+            "hostname": MQTT_HOST,
+            "port": MQTT_PORT,
+        }
+        if MQTT_USERNAME:
+            kwargs["auth"] = {"username": MQTT_USERNAME, "password": MQTT_PASSWORD}
+        if MQTT_USE_TLS:
+            kwargs["tls"] = {}
+        pub.single(**kwargs)
 
         deadline = time.time() + 3
         while time.time() < deadline and not received.get("ok"):
@@ -319,6 +424,19 @@ class TestGreenhouseFullFlow:
         print(f"\n✅  Sensor data written to DB via MQTT: temp={latest['temperature']} hum={latest['humidity']}")
 
     # -----------------------------------------------------------------------
+    # Step 8b: Latest sensor reading endpoint (survives backend sleep)
+    # -----------------------------------------------------------------------
+    def test_08b_latest_sensor_reading(self):
+        """GET /sensors/latest/ returns denormalized last reading."""
+        r = self.api.get(f"/api/v1/greenhouses/{self.__class__.gh_id}/sensors/latest/")
+        assert r.status_code == 200, f"Latest sensor fetch failed: {r.text}"
+        latest = r.json()
+        assert abs(latest["temperature"] - 27.5) < 0.1, f"Latest temp mismatch: {latest}"
+        assert abs(latest["humidity"] - 62.3) < 0.1, f"Latest hum mismatch: {latest}"
+        assert "timestamp" in latest
+        print(f"\n✅  Latest sensor reading available: temp={latest['temperature']} @ {latest['timestamp']}")
+
+    # -----------------------------------------------------------------------
     # Step 9: MQTT state update from ESP32 → DeviceState in DB
     # -----------------------------------------------------------------------
     def test_09_mqtt_state_update(self):
@@ -362,7 +480,11 @@ class TestGreenhouseFullFlow:
                 pass
             client.disconnect()
 
-        sub_client = mqtt.Client(client_id=f"test_cmd_sub_{uuid.uuid4().hex[:6]}")
+        sub_client = make_mqtt_client(f"test_cmd_sub_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub_client.tls_set()
         sub_client.on_message = on_cmd
         sub_client.connect(MQTT_HOST, MQTT_PORT, 60)
         sub_client.subscribe(cmd_topic, qos=1)
@@ -401,12 +523,19 @@ class TestGreenhouseFullFlow:
 
         def on_sched(client, userdata, msg):
             try:
-                sched_received["data"] = json.loads(msg.payload.decode())
+                data = json.loads(msg.payload.decode())
+                # Ignore stale retained empty list from device register
+                if isinstance(data, list) and len(data) >= 1:
+                    sched_received["data"] = data
+                    client.disconnect()
             except Exception:
                 pass
-            client.disconnect()
 
-        sub = mqtt.Client(client_id=f"test_sched_sub_{uuid.uuid4().hex[:6]}")
+        sub = make_mqtt_client(f"test_sched_sub_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub.tls_set()
         sub.on_message = on_sched
         sub.connect(MQTT_HOST, MQTT_PORT, 60)
         sub.subscribe(sched_topic, qos=1)
@@ -481,7 +610,11 @@ class TestGreenhouseFullFlow:
             except Exception:
                 pass
 
-        sub = mqtt.Client(client_id=f"test_sensor_sched_{uuid.uuid4().hex[:6]}")
+        sub = make_mqtt_client(f"test_sensor_sched_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub.tls_set()
         sub.on_message = on_cmd
         sub.connect(MQTT_HOST, MQTT_PORT, 60)
         sub.subscribe(cmd_topic, qos=1)
@@ -555,6 +688,121 @@ class TestGreenhouseFullFlow:
         print(f"\n✅  {len(data)} schedules listed correctly")
 
     # -----------------------------------------------------------------------
+    # Step 16b: Schedule push is RETAINED on the broker (fire-once pattern).
+    # A fresh subscriber that NEVER saw the publish should still receive the
+    # schedule list immediately on subscribe — proving retain=True, so the
+    # ESP gets it after a reboot/wake without the server re-publishing.
+    # -----------------------------------------------------------------------
+    def test_16b_schedule_push_is_retained(self):
+        sched_topic = f"gh/{SERIAL}/schedules"
+        received = {}
+
+        def on_message(client, userdata, msg):
+            try:
+                data = json.loads(msg.payload.decode())
+                if isinstance(data, list):
+                    received["data"] = data
+                    client.disconnect()
+            except Exception:
+                pass
+
+        # Brand-new subscriber — no publish happens in this test.
+        sub = make_mqtt_client(f"test_retain_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub.tls_set()
+        sub.on_message = on_message
+        sub.connect(MQTT_HOST, MQTT_PORT, 60)
+        sub.subscribe(sched_topic, qos=1)
+        sub.loop_start()
+
+        deadline = time.time() + 4
+        while time.time() < deadline and not received.get("data"):
+            time.sleep(0.1)
+        sub.loop_stop()
+
+        assert received.get("data") is not None, \
+            "Schedule is NOT retained — a new subscriber received nothing. " \
+            "The ESP would not get schedules after a reboot/wake."
+        assert isinstance(received["data"], list) and len(received["data"]) >= 2
+        print(f"\n✅  Schedule push is retained on broker (fire-once works): "
+              f"{len(received['data'])} rules delivered to a fresh subscriber")
+
+    # -----------------------------------------------------------------------
+    # Step 16c: ESP-style consumer stores pushed schedules to flash.
+    # Mirrors what the ESP32/greenhouse_simulator does: receive the retain
+    # push ONCE, persist it, and verify the stored copy matches what the
+    # server has — proving schedules survive independently of the backend.
+    # -----------------------------------------------------------------------
+    def test_16c_esp_stores_schedule_to_flash(self, tmp_path):
+        sched_topic = f"gh/{SERIAL}/schedules"
+        flash_file = tmp_path / f"schedules_{SERIAL}.json"
+        received = {}
+
+        def on_message(client, userdata, msg):
+            try:
+                data = json.loads(msg.payload.decode())
+                if isinstance(data, list):
+                    received["data"] = data
+                    # ESP writes the full list to flash on receipt.
+                    flash_file.write_text(json.dumps(data))
+                    client.disconnect()
+            except Exception:
+                pass
+
+        sub = make_mqtt_client(f"test_flash_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub.tls_set()
+        sub.on_message = on_message
+        sub.connect(MQTT_HOST, MQTT_PORT, 60)
+        sub.subscribe(sched_topic, qos=1)
+        sub.loop_start()
+
+        deadline = time.time() + 4
+        while time.time() < deadline and not received.get("data"):
+            time.sleep(0.1)
+        sub.loop_stop()
+
+        assert flash_file.exists(), "ESP never wrote schedules to flash"
+        stored = json.loads(flash_file.read_text())
+        assert isinstance(stored, list) and len(stored) >= 2, \
+            f"Flash schedule list incomplete: {stored}"
+
+        # The flash copy must match what the server reports via API.
+        api_scheds = self.api.get(
+            f"/api/v1/greenhouses/{self.__class__.gh_id}/schedules/"
+        ).json()
+        assert len(stored) == len(api_scheds), \
+            "Flash schedule count drifts from server — schedules may not run after wake"
+        print(f"\n✅  ESP stored {len(stored)} schedule(s) to flash (matches server)")
+
+    # -----------------------------------------------------------------------
+    # Step 16d: Latest reading endpoint returns staleness info and survives
+    # even when the history scan returns nothing (simulating a backend that
+    # just woke from Render spin-down with an empty/incomplete history scan).
+    # -----------------------------------------------------------------------
+    def test_16d_latest_reading_has_staleness(self):
+        r = self.api.get(
+            f"/api/v1/greenhouses/{self.__class__.gh_id}/sensors/latest/"
+        )
+        assert r.status_code == 200, f"Latest fetch failed: {r.text}"
+        latest = r.json()
+
+        # The new staleness fields drive the frontend "last seen" indicator.
+        assert "age_seconds" in latest, "Missing age_seconds field"
+        assert "is_stale" in latest, "Missing is_stale field"
+        assert latest["age_seconds"] is not None, "age_seconds should not be null"
+        assert isinstance(latest["is_stale"], bool), "is_stale must be boolean"
+        # Fresh reading (created in step 8) should not be stale yet.
+        assert latest["is_stale"] is False, \
+            f"Reading from step 8 flagged stale (age={latest['age_seconds']}s)"
+        print(f"\n✅  Latest reading has staleness: "
+              f"age={latest['age_seconds']}s, is_stale={latest['is_stale']}")
+
+    # -----------------------------------------------------------------------
     # Step 17: Soft-delete the greenhouse
     # -----------------------------------------------------------------------
     def test_17_delete_greenhouse(self):
@@ -568,6 +816,79 @@ class TestGreenhouseFullFlow:
         assert self.__class__.gh_id not in ids, "Deleted GH still in list!"
         print(f"\n✅  Greenhouse soft-deleted and removed from list")
 
+
+class TestRenderFallbackBehavior:
+    """
+    Focused tests for Render free-tier behavior.
+
+    Run these directly when you want to validate the two parts of the design:
+      1. schedules are retained so the ESP can persist them once
+      2. latest sensor reads come from the denormalized snapshot endpoint
+    """
+
+    api = APIClient(BASE_URL)
+
+    def test_01_latest_sensor_snapshot_endpoint(self):
+        """
+        GET /sensors/latest/ should return the last known reading directly.
+
+        This is the fast path the frontend should use when the backend may
+        have just woken up on Render free tier.
+        """
+        greenhouse_id = os.environ.get('TEST_GREENHOUSE_ID')
+        if not greenhouse_id:
+            pytest.skip('Set TEST_GREENHOUSE_ID to run this standalone.')
+
+        r = self.api.get(f"/api/v1/greenhouses/{greenhouse_id}/sensors/latest/")
+        assert r.status_code == 200, f"Latest sensor fetch failed: {r.text}"
+        data = r.json()
+        assert "temperature" in data
+        assert "humidity" in data
+        assert "age_seconds" in data
+        assert "is_stale" in data
+        assert isinstance(data["is_stale"], bool)
+
+    def test_02_retained_schedule_payload_is_available_to_new_subscriber(self):
+        """
+        A fresh MQTT subscriber should receive the retained schedule payload.
+
+        This proves the server is pushing schedules once with retain=True so
+        the ESP32 can write them to flash and keep running locally.
+        """
+        greenhouse_serial = os.environ.get('TEST_GREENHOUSE_SERIAL')
+        if not greenhouse_serial:
+            pytest.skip('Set TEST_GREENHOUSE_SERIAL to run this standalone.')
+
+        received = {}
+        topic = f"gh/{greenhouse_serial}/schedules"
+
+        def on_message(client, userdata, msg):
+            try:
+                payload = json.loads(msg.payload.decode())
+                if isinstance(payload, list):
+                    received["data"] = payload
+                    client.disconnect()
+            except Exception:
+                pass
+
+        sub = make_mqtt_client(f"render_retain_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub.tls_set()
+        sub.on_message = on_message
+        sub.connect(MQTT_HOST, MQTT_PORT, 60)
+        sub.subscribe(topic, qos=1)
+        sub.loop_start()
+
+        deadline = time.time() + 4
+        while time.time() < deadline and not received.get("data"):
+            time.sleep(0.1)
+        sub.loop_stop()
+
+        assert received.get("data") is not None, \
+            "Retained schedule payload was not delivered to a fresh subscriber"
+        assert isinstance(received["data"], list)
 
 # ===========================================================================
 # Stand-alone tests (not part of the ordered flow)

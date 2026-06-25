@@ -221,6 +221,13 @@ Get current device state (fan, pump, light). **Requires auth + ownership.**
 }
 ```
 
+### GET `/api/v1/greenhouses/{id}/sensors/latest/`
+Get the denormalized latest sensor snapshot. **Requires auth + ownership.**
+
+Use this endpoint when the backend may have been asleep on Render free tier.
+It reads the single `LatestSensorReading` row instead of scanning the history
+table, so the UI can show the last known values immediately after wake-up.
+
 ---
 
 ## 4. Device Control
@@ -348,7 +355,10 @@ Partial update a schedule. **Requires auth + ownership.**
 Delete a schedule. **Requires auth + ownership.**  
 Response: `204 No Content`
 
-> Any write to schedules (create/update/delete) triggers a MQTT push of the full updated schedule list to the ESP32 on topic `gh/{serial}/schedules`.
+> Any write to schedules (create/update/delete) triggers a retained MQTT push
+> of the full updated schedule list to `gh/{serial}/schedules`. The ESP32
+> should write that list to flash and run schedules locally so they keep
+> working even if the Render backend spins down.
 
 ---
 

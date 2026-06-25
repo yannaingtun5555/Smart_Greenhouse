@@ -651,6 +651,15 @@ body {
 }
 .sensor-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
 .sensor-card-icon { font-size: 1.65rem; line-height: 1; }
+.sensor-card-stale {
+  font-size: 1rem; line-height: 1; cursor: help;
+  filter: grayscale(.1) brightness(.9);
+  animation: stale-pulse 2.4s ease-in-out infinite;
+}
+@keyframes stale-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .55; transform: scale(.92); }
+}
 .sensor-card-label {
   font-size: .69rem; color: var(--clr-text3); margin-bottom: 5px;
   text-transform: uppercase; letter-spacing: .09em; font-weight: 600;

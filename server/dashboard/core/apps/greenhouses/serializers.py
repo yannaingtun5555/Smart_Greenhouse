@@ -1,6 +1,9 @@
+import math
+
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Greenhouse, SensorData, DeviceState
+from .models import Greenhouse, SensorData, DeviceState, LatestSensorReading
 
 
 class GreenhouseSerializer(serializers.ModelSerializer):
@@ -40,6 +43,35 @@ class SensorDataSerializer(serializers.ModelSerializer):
             'temperature', 'humidity', 'soil_moisture', 'light_intensity', 'battery',
         ]
         read_only_fields = fields
+
+
+class LatestSensorReadingSerializer(serializers.ModelSerializer):
+    """Includes staleness info so the frontend can show 'last seen X min ago'."""
+    age_seconds = serializers.SerializerMethodField()
+    is_stale = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LatestSensorReading
+        fields = [
+            'greenhouse_id', 'timestamp',
+            'temperature', 'humidity', 'soil_moisture', 'light_intensity', 'battery',
+            'age_seconds', 'is_stale',
+        ]
+        read_only_fields = fields
+
+    def get_age_seconds(self, obj):
+        """Seconds since this reading was taken (null if never)."""
+        if obj.timestamp:
+            delta = timezone.now() - obj.timestamp
+            return max(0, math.floor(delta.total_seconds()))
+        return None
+
+    def get_is_stale(self, obj):
+        """True if reading is older than 5 minutes (backend may have been sleeping)."""
+        if obj.timestamp:
+            delta = timezone.now() - obj.timestamp
+            return delta.total_seconds() > 300  # 5 minutes
+        return True
 
 
 class DeviceStateSerializer(serializers.ModelSerializer):

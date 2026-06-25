@@ -4,6 +4,7 @@ from .views import (
     GreenhouseListCreateView,
     GreenhouseDetailView,
     SensorDataListView,
+    LatestSensorReadingView,
     DeviceStateView,
     ControlView,
 )
@@ -15,6 +16,7 @@ urlpatterns = [
 
     # Sensor data (read-only)
     path('greenhouses/<int:pk>/sensors/', SensorDataListView.as_view(), name='greenhouse-sensors'),
+    path('greenhouses/<int:pk>/sensors/latest/', LatestSensorReadingView.as_view(), name='greenhouse-sensors-latest'),
 
     # Device state
     path('greenhouses/<int:pk>/state/', DeviceStateView.as_view(), name='greenhouse-state'),
