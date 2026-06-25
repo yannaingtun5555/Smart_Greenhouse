@@ -149,7 +149,12 @@ if DATABASE_URL:
     else:
         raise RuntimeError(f'Unsupported DATABASE_URL scheme: {parsed_db.scheme}')
 else:
-    if os.environ.get('RENDER') == 'true' or not os.environ.get('DB_HOST'):
+    if os.environ.get('RENDER') == 'true':
+        raise RuntimeError(
+            'DATABASE_URL is required on Render. Link the Postgres database to '
+            'the web service or set DATABASE_URL in the service environment.'
+        )
+    if not os.environ.get('DB_HOST'):
         DATABASES = {
             'default': {
                 'ENGINE': 'django.db.backends.sqlite3',
