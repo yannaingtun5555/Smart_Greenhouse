@@ -7,6 +7,12 @@ function getDefaultApiBase() {
   return `${protocol}//${hostname}:8000`;
 }
 
+function getRuntimeApiBase() {
+  if (typeof window === 'undefined') return '';
+  const value = window.__GREENHOUSE_API_BASE__;
+  return typeof value === 'string' ? value.trim().replace(/\/+$/, '') : '';
+}
+
 function setApiBase(baseUrl) {
   const normalized = (baseUrl || '').trim().replace(/\/+$/, '');
   if (!normalized) return getDefaultApiBase();
@@ -15,7 +21,11 @@ function setApiBase(baseUrl) {
 }
 
 function getApiBase() {
-  return (localStorage.getItem('api_base') || getDefaultApiBase()).replace(/\/+$/, '');
+  return (
+    localStorage.getItem('api_base') ||
+    getRuntimeApiBase() ||
+    getDefaultApiBase()
+  ).replace(/\/+$/, '');
 }
 
 function getAccessToken() {
@@ -146,4 +156,3 @@ function deleteSchedule(ghId, scheduleId) {
     method: 'DELETE',
   });
 }
-
