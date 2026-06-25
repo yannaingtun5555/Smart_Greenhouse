@@ -1,25 +1,37 @@
 smart_greenhouse/
-├── docs/                     (optional)
-├── server/
-│   ├── docker-compose.yml
-│   ├── .env
-│   ├── mqtt_worker.py        # Background consumer
-│   ├── scheduler.py          # Background scheduler
-│   └── dashboard/            # Django project
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       ├── manage.py
-│       └── core/             # Django main app
-│           ├── __init__.py
-│           ├── settings.py
-│           ├── urls.py
-│           ├── asgi.py
-│           ├── wsgi.py
-│           └── apps/
-│               ├── accounts/        # custom user, login
-│               ├── greenhouses/     # models, views, api
-│               ├── devices/         # ESP token handling
-│               └── schedules/       # scheduling logic
-└── mosquitto/
-    └── config/
-        └── mosquitto.conf
+├── docs/
+│   ├── api.md
+│   └── design.txt
+├── frontend/
+│   └── ...
+├── render.yaml
+└── server/
+    ├── docker-compose.yml
+    ├── dev.sh
+    ├── dev-frontend.sh
+    ├── dashboard/
+    │   ├── Dockerfile
+    │   ├── requirements.txt
+    │   ├── manage.py
+    │   └── core/
+    │       ├── settings.py
+    │       ├── urls.py
+    │       ├── asgi.py
+    │       ├── wsgi.py
+    │       ├── mqtt_runtime.py
+    │       └── apps/
+    │           ├── accounts/
+    │           ├── devices/
+    │           ├── greenhouses/
+    │           └── schedules/
+    └── mqtt/
+        ├── Dockerfile
+        ├── requirements.txt
+        └── mqtt_worker.py
+
+Runtime layout:
+
+1. Local Docker uses `server/docker-compose.yml` and the standalone worker in `server/mqtt/mqtt_worker.py`.
+2. Render uses `render.yaml`, boots Django from `server/dashboard/core/wsgi.py`, and starts `server/dashboard/core/mqtt_runtime.py` in-process.
+3. Django publishes MQTT commands from `server/dashboard/core/apps/greenhouses/utils.py`.
+4. MQTT feature flags live in `server/dashboard/core/settings.py`.

@@ -1,18 +1,10 @@
 services:
-  # ───────────────────────────────────────────────────────────────────────
-  # Web service: Django API + served static frontend + in-process MQTT
-  # subscriber (runs inside the gunicorn process so no paid background worker
-  # is needed on the free plan).
-  # ───────────────────────────────────────────────────────────────────────
   - type: web
     name: smart-greenhouse-backend
     env: python
     plan: free
     rootDir: server/dashboard
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    # Run migrations, then gunicorn with a SINGLE worker. One worker matters:
-    # the in-process MQTT subscriber must be a singleton to avoid duplicate
-    # sensor inserts, and 1 worker also fits the free plan's 512 MB RAM.
     startCommand: python manage.py migrate --noinput && gunicorn core.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     autoDeploy: true
     envVars:
@@ -28,35 +20,14 @@ services:
         generateValue: true
       - key: CORS_ALLOWED_ORIGINS
         value: https://smart-greenhouse-backend.onrender.com
-      # ── Database (auto-injected by the Postgres resource below) ──
       - key: DATABASE_URL
         fromDatabase:
           name: greenhouse-db
           property: connectionString
-      # ── MQTT: in-process subscriber + Django command publishing ──
-      # Toggle the in-process MQTT worker on. Local Docker keeps using the
-      # standalone mqtt_worker.py service, so there are no duplicate subs.
       - key: MQTT_WORKER_IN_PROCESS
         value: "true"
       - key: MQTT_ENABLED
         value: "true"
-      # ── MQTT BROKER ───────────────────────────────────────────────
-      # Render's free plan CANNOT run its own MQTT broker, so point
-      # MQTT_BROKER at a broker that is reachable from Render:
-      #
-      #   • Your own local/Raspberry-Pi broker on a LAN exposed via a
-      #     public IP / dynamic DNS + port-forwarded 1883 (or 8883 + TLS).
-      #   • A free-tier cloud broker: HiveMQ Cloud, EMQX Cloud, or a
-      #     Mosquitto instance on another free host (fly.io, etc.).
-      #
-      # ESP32 devices connect to the SAME broker. Schedules are pushed ONCE
-      # (retain=True) and executed on the ESP from flash, so they keep
-      # running while the Render backend is asleep (free-tier spin-down).
-      # The persistent in-process session (clean_session=False, QoS 1) also
-      # queues sensor messages at the broker during sleep and redelivers
-      # them on wake — so no readings are lost.
-      #
-      # SET MQTT_BROKER / MQTT_USERNAME / MQTT_PASSWORD IN THE DASHBOARD:
       - key: MQTT_BROKER
         sync: false
       - key: MQTT_PORT
@@ -69,16 +40,9 @@ services:
         sync: false
       - key: MQTT_KEEPALIVE
         value: "60"
-      # Schedules run on ESP flash; server only pushes the list once.
       - key: SERVER_SCHEDULE_DISPATCH
         value: "false"
-
-  # ───────────────────────────────────────────────────────────────────────
-  # Free PostgreSQL. NOTE: Render's free Postgres expires 90 days after
-  # creation — back up data before then, or upgrade to a paid instance.
-  # The web service reads DATABASE_URL from this resource above.
-  # ───────────────────────────────────────────────────────────────────────
   - type: psql
     name: greenhouse-db
     plan: free
-    ipAllowList: []  # allow connections from Render services only
+    ipAllowList: []

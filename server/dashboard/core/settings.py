@@ -218,7 +218,6 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 MQTT_ENABLED = _env_bool('MQTT_ENABLED', True if os.environ.get('RENDER') == 'true' else DEBUG)
 MQTT_BROKER = os.environ.get('MQTT_BROKER', 'localhost')
 MQTT_PORT = int(os.environ.get('MQTT_PORT', 1883))
-# When false (default on Render in-process worker), schedules run on ESP flash only.
 SERVER_SCHEDULE_DISPATCH = _env_bool(
     'SERVER_SCHEDULE_DISPATCH',
     not _env_bool('MQTT_WORKER_IN_PROCESS', False),

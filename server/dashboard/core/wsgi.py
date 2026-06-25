@@ -15,12 +15,9 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 
 application = get_wsgi_application()
 
-# On hosting providers that cannot run a separate background worker for free
-# (e.g. Render free tier), start the in-process MQTT subscriber here. It is a
-# no-op unless MQTT_WORKER_IN_PROCESS=true, so local dev is unaffected.
 try:
     from core import mqtt_runtime
     mqtt_runtime.start()
-except Exception:  # never let a subscriber failure break web boot
+except Exception:
     import logging
     logging.getLogger('core.mqtt_runtime').exception('MQTT runtime failed to start')
