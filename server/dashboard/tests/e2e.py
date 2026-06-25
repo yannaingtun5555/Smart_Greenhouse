@@ -22,10 +22,49 @@ import os
 import time
 import uuid
 import warnings
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 import pytest
 import requests
+
+
+def _load_env_file() -> None:
+    """
+    Load server/.env into os.environ so the tests talk to the same broker as
+    the Docker stack (django + mqtt_worker) without manual `export`s.
+
+    Existing environment variables always win (os.environ.setdefault) so
+    explicit exports / CI config are never overridden.
+    """
+    candidates = [
+        Path(__file__).resolve().parents[2] / '.env',           # server/.env
+        Path(__file__).resolve().parents[1] / '.env',           # dashboard/.env
+        Path.cwd() / '.env',
+    ]
+    for env_path in candidates:
+        if not env_path.exists():
+            continue
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, value = line.partition('=')
+            os.environ.setdefault(key.strip(), value.strip())
+        break
+
+
+_load_env_file()
+
+# ---------------------------------------------------------------------------
+# paho-mqtt v2 compatibility: use CallbackAPIVersion.VERSION2 so v1-style
+# callbacks don't raise the deprecation error on connect.
+# ---------------------------------------------------------------------------
+try:
+    from paho.mqtt.enums import CallbackAPIVersion
+    _CALLBACK_API_VERSION = CallbackAPIVersion.VERSION2
+except ImportError:  # paho-mqtt v1
+    _CALLBACK_API_VERSION = None
 
 # Suppress paho-mqtt v1 callback deprecation warnings in test code
 warnings.filterwarnings("ignore", message="Callback API version 1 is deprecated.*", category=DeprecationWarning)
@@ -39,6 +78,14 @@ MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 MQTT_USERNAME = os.environ.get("MQTT_USERNAME")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")
 MQTT_USE_TLS = os.environ.get("MQTT_USE_TLS", "false").lower() in {"1", "true", "yes", "on"}
+
+
+def make_mqtt_client(client_id: str) -> mqtt.Client:
+    """Create an MQTT client with the right callback API version for paho v1/v2."""
+    kwargs = {"client_id": client_id, "protocol": mqtt.MQTTv311}
+    if _CALLBACK_API_VERSION is not None:
+        kwargs["callback_api_version"] = _CALLBACK_API_VERSION
+    return mqtt.Client(**kwargs)
 
 # Unique suffix so parallel runs don't collide
 RUN_ID = uuid.uuid4().hex[:6]
@@ -110,7 +157,7 @@ def mqtt_subscribe_once(topic, timeout=5, host=MQTT_HOST, port=MQTT_PORT):
             received["data"] = msg.payload.decode()
         client.disconnect()
 
-    client = mqtt.Client(client_id=f"test_sub_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+    client = make_mqtt_client(f"test_sub_{uuid.uuid4().hex[:6]}")
     if MQTT_USERNAME:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     if MQTT_USE_TLS:
@@ -240,7 +287,7 @@ class TestGreenhouseFullFlow:
             except Exception:
                 pass
 
-        sub = mqtt.Client(client_id=f"test_reg_sched_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+        sub = make_mqtt_client(f"test_reg_sched_{uuid.uuid4().hex[:6]}")
         if MQTT_USERNAME:
             sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
         if MQTT_USE_TLS:
@@ -303,7 +350,7 @@ class TestGreenhouseFullFlow:
                 received["ok"] = True
             client.disconnect()
 
-        c = mqtt.Client(client_id=f"test_health_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+        c = make_mqtt_client(f"test_health_{uuid.uuid4().hex[:6]}")
         if MQTT_USERNAME:
             c.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
         if MQTT_USE_TLS:
@@ -433,7 +480,7 @@ class TestGreenhouseFullFlow:
                 pass
             client.disconnect()
 
-        sub_client = mqtt.Client(client_id=f"test_cmd_sub_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+        sub_client = make_mqtt_client(f"test_cmd_sub_{uuid.uuid4().hex[:6]}")
         if MQTT_USERNAME:
             sub_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
         if MQTT_USE_TLS:
@@ -484,7 +531,7 @@ class TestGreenhouseFullFlow:
             except Exception:
                 pass
 
-        sub = mqtt.Client(client_id=f"test_sched_sub_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+        sub = make_mqtt_client(f"test_sched_sub_{uuid.uuid4().hex[:6]}")
         if MQTT_USERNAME:
             sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
         if MQTT_USE_TLS:
@@ -563,7 +610,7 @@ class TestGreenhouseFullFlow:
             except Exception:
                 pass
 
-        sub = mqtt.Client(client_id=f"test_sensor_sched_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+        sub = make_mqtt_client(f"test_sensor_sched_{uuid.uuid4().hex[:6]}")
         if MQTT_USERNAME:
             sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
         if MQTT_USE_TLS:
@@ -660,7 +707,7 @@ class TestGreenhouseFullFlow:
                 pass
 
         # Brand-new subscriber — no publish happens in this test.
-        sub = mqtt.Client(client_id=f"test_retain_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+        sub = make_mqtt_client(f"test_retain_{uuid.uuid4().hex[:6]}")
         if MQTT_USERNAME:
             sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
         if MQTT_USE_TLS:
@@ -704,7 +751,7 @@ class TestGreenhouseFullFlow:
             except Exception:
                 pass
 
-        sub = mqtt.Client(client_id=f"test_flash_{uuid.uuid4().hex[:6]}", protocol=mqtt.MQTTv311)
+        sub = make_mqtt_client(f"test_flash_{uuid.uuid4().hex[:6]}")
         if MQTT_USERNAME:
             sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
         if MQTT_USE_TLS:
@@ -769,6 +816,79 @@ class TestGreenhouseFullFlow:
         assert self.__class__.gh_id not in ids, "Deleted GH still in list!"
         print(f"\n✅  Greenhouse soft-deleted and removed from list")
 
+
+class TestRenderFallbackBehavior:
+    """
+    Focused tests for Render free-tier behavior.
+
+    Run these directly when you want to validate the two parts of the design:
+      1. schedules are retained so the ESP can persist them once
+      2. latest sensor reads come from the denormalized snapshot endpoint
+    """
+
+    api = APIClient(BASE_URL)
+
+    def test_01_latest_sensor_snapshot_endpoint(self):
+        """
+        GET /sensors/latest/ should return the last known reading directly.
+
+        This is the fast path the frontend should use when the backend may
+        have just woken up on Render free tier.
+        """
+        greenhouse_id = os.environ.get('TEST_GREENHOUSE_ID')
+        if not greenhouse_id:
+            pytest.skip('Set TEST_GREENHOUSE_ID to run this standalone.')
+
+        r = self.api.get(f"/api/v1/greenhouses/{greenhouse_id}/sensors/latest/")
+        assert r.status_code == 200, f"Latest sensor fetch failed: {r.text}"
+        data = r.json()
+        assert "temperature" in data
+        assert "humidity" in data
+        assert "age_seconds" in data
+        assert "is_stale" in data
+        assert isinstance(data["is_stale"], bool)
+
+    def test_02_retained_schedule_payload_is_available_to_new_subscriber(self):
+        """
+        A fresh MQTT subscriber should receive the retained schedule payload.
+
+        This proves the server is pushing schedules once with retain=True so
+        the ESP32 can write them to flash and keep running locally.
+        """
+        greenhouse_serial = os.environ.get('TEST_GREENHOUSE_SERIAL')
+        if not greenhouse_serial:
+            pytest.skip('Set TEST_GREENHOUSE_SERIAL to run this standalone.')
+
+        received = {}
+        topic = f"gh/{greenhouse_serial}/schedules"
+
+        def on_message(client, userdata, msg):
+            try:
+                payload = json.loads(msg.payload.decode())
+                if isinstance(payload, list):
+                    received["data"] = payload
+                    client.disconnect()
+            except Exception:
+                pass
+
+        sub = make_mqtt_client(f"render_retain_{uuid.uuid4().hex[:6]}")
+        if MQTT_USERNAME:
+            sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            sub.tls_set()
+        sub.on_message = on_message
+        sub.connect(MQTT_HOST, MQTT_PORT, 60)
+        sub.subscribe(topic, qos=1)
+        sub.loop_start()
+
+        deadline = time.time() + 4
+        while time.time() < deadline and not received.get("data"):
+            time.sleep(0.1)
+        sub.loop_stop()
+
+        assert received.get("data") is not None, \
+            "Retained schedule payload was not delivered to a fresh subscriber"
+        assert isinstance(received["data"], list)
 
 # ===========================================================================
 # Stand-alone tests (not part of the ordered flow)

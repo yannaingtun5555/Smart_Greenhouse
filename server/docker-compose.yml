@@ -87,9 +87,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
       DB_HOST: db
       DB_PORT: 5432
-      # MQTT
-      MQTT_BROKER: mqtt
-      MQTT_PORT: 1883
+      # MQTT (defaults to local CoreFlux broker; set in .env for cloud broker)
+      MQTT_BROKER: ${MQTT_BROKER:-mqtt}
+      MQTT_PORT: ${MQTT_PORT:-1883}
       MQTT_USERNAME: ${MQTT_USERNAME:-}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-}
       MQTT_USE_TLS: ${MQTT_USE_TLS:-false}
@@ -124,9 +124,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
       DB_HOST: db
       DB_PORT: 5432
-      # MQTT
-      MQTT_BROKER: mqtt
-      MQTT_PORT: 1883
+      # MQTT (defaults to local CoreFlux broker; set in .env for cloud broker)
+      MQTT_BROKER: ${MQTT_BROKER:-mqtt}
+      MQTT_PORT: ${MQTT_PORT:-1883}
       MQTT_USERNAME: ${MQTT_USERNAME:-}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-}
       MQTT_USE_TLS: ${MQTT_USE_TLS:-false}

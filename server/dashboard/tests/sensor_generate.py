@@ -15,14 +15,61 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
+import ssl
 import sys
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 import requests
+
+
+def _load_env_file() -> None:
+    """
+    Load server/.env into os.environ so the simulator talks to the same broker
+    as the Docker stack (django + mqtt_worker) without manual `export`s.
+
+    Looks for .env in <repo>/server/ (parent of this dashboard dir). Existing
+    environment variables always win (os.environ.setdefault) so explicit
+    exports / CI config are never overridden.
+    """
+    candidates = [
+        Path(__file__).resolve().parents[2] / '.env',           # server/.env
+        Path(__file__).resolve().parents[1] / '.env',           # dashboard/.env
+        Path.cwd() / '.env',
+    ]
+    for env_path in candidates:
+        if not env_path.exists():
+            continue
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, value = line.partition('=')
+            os.environ.setdefault(key.strip(), value.strip())
+        break
+
+
+_load_env_file()
+
+MQTT_USERNAME = os.environ.get("MQTT_USERNAME")
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD")
+MQTT_USE_TLS = os.environ.get("MQTT_USE_TLS", "false").lower() in {"1", "true", "yes", "on"}
+MQTT_HOST_ENV = os.environ.get("MQTT_BROKER", "localhost")
+MQTT_PORT_ENV = int(os.environ.get("MQTT_PORT", "1883"))
+
+# ---------------------------------------------------------------------------
+# paho-mqtt v2 compatibility: try CallbackAPIVersion.VERSION2, fall back to v1
+# ---------------------------------------------------------------------------
+try:
+    from paho.mqtt.enums import CallbackAPIVersion
+    _CALLBACK_API_VERSION = CallbackAPIVersion.VERSION2
+except ImportError:
+    _CALLBACK_API_VERSION = None  # paho-mqtt v1
 
 
 def register_greenhouse(base_url: str, serial_number: str) -> str:
@@ -75,11 +122,19 @@ class ControlledGreenhouseSimulator:
         }
 
         # MQTT client
-        self.client = mqtt.Client(client_id=f"gh-ctrl-{serial}")
+        client_kwargs = {"client_id": f"gh-ctrl-{serial}"}
+        if _CALLBACK_API_VERSION is not None:
+            client_kwargs["callback_api_version"] = _CALLBACK_API_VERSION
+        self.client = mqtt.Client(**client_kwargs)
+        if MQTT_USERNAME:
+            self.client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        if MQTT_USE_TLS:
+            self.client.tls_set_context(ssl.create_default_context())
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
 
-    def _on_connect(self, client, userdata, flags, rc):
+    def _on_connect(self, client, userdata, flags, rc, *args):
+        # paho-mqtt v2 passes an extra 'properties' arg; *args absorbs it
         if rc == 0:
             print("[MQTT] Connected.")
             # Subscribe to command and schedule topics
@@ -220,8 +275,8 @@ def prompt_config():
 def main():
     parser = argparse.ArgumentParser(description="Controlled greenhouse simulator with increments")
     parser.add_argument("--base-url", default="http://localhost:8000")
-    parser.add_argument("--mqtt-host", default="localhost")
-    parser.add_argument("--mqtt-port", type=int, default=1883)
+    parser.add_argument("--mqtt-host", default=MQTT_HOST_ENV, help="MQTT broker host (default: $MQTT_BROKER)")
+    parser.add_argument("--mqtt-port", type=int, default=MQTT_PORT_ENV, help="MQTT broker port (default: $MQTT_PORT)")
     parser.add_argument("--serial", required=True, help="Greenhouse serial number")
     parser.add_argument("--token", help="Existing API token (if not provided, will register)")
     args = parser.parse_args()
