@@ -83,12 +83,7 @@ services:
       # - key: SENTRY_DSN
       #   sync: false
 databases:
-  - type: psql
-    name: greenhouse-db
+  - name: greenhouse-db
     plan: free
-    ipAllowList: []  # Only Render internal access
     databaseName: greenhouse
     user: greenhouse_user
-    # Uncomment if you want to specify a different database/user
-    # database: greenhouse
-    # user: greenhouse_user
