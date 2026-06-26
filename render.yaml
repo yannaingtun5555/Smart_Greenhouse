@@ -14,76 +14,52 @@ services:
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: core.settings
-      
       - key: RENDER
         value: "true"
-      
       - key: DEBUG
         value: "false"
-      
       - key: ALLOWED_HOSTS
         value: ".onrender.com,smart-greenhouse-backend.onrender.com"
-      
       - key: SECRET_KEY
         generateValue: true
-      
       - key: CORS_ALLOWED_ORIGINS
         value: "https://smart-greenhouse-backend.onrender.com,https://smart-greenhouse-frontend.onrender.com"
-      
       - key: CSRF_TRUSTED_ORIGINS
         value: "https://smart-greenhouse-backend.onrender.com,https://smart-greenhouse-frontend.onrender.com"
-      
       - key: DATABASE_URL
         fromDatabase:
           name: greenhouse-db
           property: connectionString
-      
       # MQTT Configuration
       - key: MQTT_WORKER_IN_PROCESS
         value: "true"
-      
       - key: MQTT_ENABLED
         value: "true"
-      
       - key: MQTT_BROKER
         value: "your-broker-url.hivemq.cloud"  # ← REPLACE with your broker URL
-        sync: false
-      
       - key: MQTT_PORT
-        value: "1883"  # Use 8883 for TLS
-      
+        value: "1883"
       - key: MQTT_USE_TLS
-        value: "false"  # Set to "true" if using port 8883
-      
+        value: "false"
       - key: MQTT_USERNAME
         value: "yan9htun"  # ← REPLACE with your username
-        sync: false
-      
       - key: MQTT_PASSWORD
         value: "yan9htun"  # ← REPLACE with your password
-        sync: false
-      
       - key: MQTT_KEEPALIVE
         value: "60"
-      
       - key: MQTT_CLIENT_ID_PREFIX
         value: "render-backend"
-      
       - key: SERVER_SCHEDULE_DISPATCH
         value: "false"
-      
-      # Optional: Django performance settings
       - key: CONN_MAX_AGE
         value: "600"
-      
       - key: DISABLE_COLLECTSTATIC
         value: "0"
-      
-      # Optional: Sentry for error tracking (if you have it)
-      # - key: SENTRY_DSN
-      #   sync: false
+
 databases:
-  - name: greenhouse-db
+  - type: psql
+    name: greenhouse-db
     plan: free
+    ipAllowList: []
     databaseName: greenhouse
     user: greenhouse_user
