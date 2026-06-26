@@ -82,16 +82,6 @@ services:
       # Optional: Sentry for error tracking (if you have it)
       # - key: SENTRY_DSN
       #   sync: false
-  - type: static
-    name: smart-greenhouse-frontend
-    plan: free
-    rootDir: frontend
-    buildCommand: sh build-render.sh
-    staticPublishPath: dist
-    envVars:
-      - key: RENDER_API_BASE
-        value: https://smart-greenhouse-backend.onrender.com
-
 databases:
   - type: psql
     name: greenhouse-db
