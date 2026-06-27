@@ -77,13 +77,13 @@ class LatestSensorReadingSerializer(serializers.ModelSerializer):
 class DeviceStateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeviceState
-        fields = ['greenhouse_id', 'fan', 'water_pump', 'light', 'energy_state', 'updated_at']
+        fields = ['greenhouse_id', 'fan_set1', 'fan_set2', 'water_pump', 'light', 'energy_state', 'updated_at']
         read_only_fields = ['greenhouse_id', 'updated_at']
 
 
 class ControlCommandSerializer(serializers.Serializer):
     """Validates a real-time control command from the frontend."""
-    DEVICE_CHOICES = ['fan', 'pump', 'light']
+    DEVICE_CHOICES = ['fan_set1', 'fan_set2', 'pump', 'light']
     ACTION_CHOICES = ['on', 'off']
 
     device = serializers.ChoiceField(choices=DEVICE_CHOICES)

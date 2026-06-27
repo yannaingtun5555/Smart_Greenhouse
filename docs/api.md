@@ -207,13 +207,14 @@ Get latest sensor readings. **Requires auth + ownership.**
 ```
 
 ### GET `/api/v1/greenhouses/{id}/state/`
-Get current device state (fan, pump, light). **Requires auth + ownership.**
+Get current device state (fan set 1, fan set 2, pump, light). **Requires auth + ownership.**
 
 **Response `200`:**
 ```json
 {
   "greenhouse_id": 1,
-  "fan": false,
+  "fan_set1": false,
+  "fan_set2": true,
   "water_pump": false,
   "light": true,
   "energy_state": "battery",
@@ -240,25 +241,26 @@ Send a real-time control command to the ESP32 via MQTT. **Requires auth + owners
 **Request:**
 ```json
 {
-  "device": "fan",
+  "device": "fan_set1",
   "action": "on"
 }
 ```
 
 | Field | Values |
 |-------|--------|
-| `device` | `fan`, `pump`, `light` |
+| `device` | `fan_set1`, `fan_set2`, `pump`, `light` |
 | `action` | `on`, `off` |
 
 **Response `200`:**
 ```json
 {
-  "device": "fan",
+  "device": "fan_set1",
   "action": "on",
   "mqtt_sent": true,
   "state": {
     "greenhouse_id": 1,
-    "fan": true,
+    "fan_set1": true,
+    "fan_set2": false,
     "water_pump": false,
     "light": true,
     "energy_state": "battery",
@@ -286,6 +288,7 @@ List all schedules for a greenhouse. **Requires auth + ownership.**
     "id": 1,
     "greenhouse": 1,
     "device_type": "fan",
+    "fan_target": "set1",
     "condition_type": "sensor",
     "time_of_day": null,
     "sensor_name": "temperature",
@@ -298,6 +301,7 @@ List all schedules for a greenhouse. **Requires auth + ownership.**
     "id": 2,
     "greenhouse": 1,
     "device_type": "pump",
+    "fan_target": null,
     "condition_type": "time",
     "time_of_day": "16:00:00",
     "sensor_name": null,
@@ -324,10 +328,11 @@ Create a new schedule. **Requires auth + ownership.**
 }
 ```
 
-**Sensor-based example** (fan on when temp ≥ 30°C):
+**Sensor-based example** (fan set 1 on when temp ≥ 30°C):
 ```json
 {
   "device_type": "fan",
+  "fan_target": "set1",
   "condition_type": "sensor",
   "sensor_name": "temperature",
   "operator": ">=",
@@ -339,6 +344,7 @@ Create a new schedule. **Requires auth + ownership.**
 **Sensor name options:** `temperature`, `humidity`, `soil_moisture`, `light_intensity`  
 **Operator options:** `>`, `<`, `>=`, `<=`, `==`  
 **Device options:** `fan`, `pump`, `light`  
+**Fan target options** (only when `device_type=fan`): `all`, `set1`, `set2` (default: `all`)  
 **Action options:** `on`, `off`
 
 **Response `201`:** Schedule object. The backend also pushes the full schedule list to the ESP32 via MQTT.
@@ -476,7 +482,8 @@ Manually override a greenhouse status.
 ```json
 {
   "token": "a3f1c8...",
-  "fan": true,
+  "fan_set1": true,
+  "fan_set2": false,
   "water_pump": false,
   "light": false,
   "energy_state": "battery"
@@ -486,8 +493,16 @@ Manually override a greenhouse status.
 ### Payload: `gh/{serial}/cmd` (Server → ESP32)
 ```json
 {
-  "device": "fan",
+  "device": "fan_set1",
   "action": "on"
+}
+```
+When fired from a fan schedule, the command includes the fan set selector:
+```json
+{
+  "device": "fan",
+  "action": "on",
+  "fan_target": "set1"
 }
 ```
 
@@ -497,6 +512,7 @@ Manually override a greenhouse status.
   {
     "id": 1,
     "device_type": "fan",
+    "fan_target": "set1",
     "condition_type": "sensor",
     "sensor_name": "temperature",
     "operator": ">=",
@@ -507,6 +523,7 @@ Manually override a greenhouse status.
   {
     "id": 2,
     "device_type": "pump",
+    "fan_target": null,
     "condition_type": "time",
     "time_of_day": "16:00",
     "action": "on",
@@ -561,7 +578,8 @@ Manually override a greenhouse status.
 | Field | Type | Notes |
 |-------|------|-------|
 | `greenhouse_id` | PK/FK | |
-| `fan` | bool | |
+| `fan_set1` | bool | Fan Set 1 |
+| `fan_set2` | bool | Fan Set 2 |
 | `water_pump` | bool | |
 | `light` | bool | |
 | `energy_state` | enum | `battery`, `grid` |
@@ -573,6 +591,7 @@ Manually override a greenhouse status.
 | `id` | int | Auto |
 | `greenhouse` | FK | |
 | `device_type` | enum | `fan`, `pump`, `light` |
+| `fan_target` | enum | `all`, `set1`, `set2` (only when `device_type=fan`; default `all`) |
 | `condition_type` | enum | `time`, `sensor` |
 | `time_of_day` | time | Used only when `condition_type=time` |
 | `sensor_name` | enum | `temperature`, `humidity`, `soil_moisture`, `light_intensity` |
@@ -626,11 +645,11 @@ curl -X POST http://localhost:8000/api/v1/devices/register/ \
   -H "Content-Type: application/json" \
   -d '{"serial_number":"GH-001"}'
 
-# 5. Control fan
+# 5. Control fan set 1
 curl -X PATCH http://localhost:8000/api/v1/greenhouses/1/control/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"device":"fan","action":"on"}'
+  -d '{"device":"fan_set1","action":"on"}'
 
 # 6. Create time-based schedule
 curl -X POST http://localhost:8000/api/v1/greenhouses/1/schedules/ \

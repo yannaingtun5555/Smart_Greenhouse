@@ -212,9 +212,14 @@
             Device Status
           </div>
           <div class="device-indicators" id="device-indicators">
-            <div class="device-indicator" id="ind-fan" role="status" aria-label="Fan status">
+            <div class="device-indicator" id="ind-fan-set1" role="status" aria-label="Fan Set 1 status">
               <span class="device-icon" aria-hidden="true">💨</span>
-              <span class="device-label">Fan</span>
+              <span class="device-label">Fan Set 1</span>
+              <span class="device-badge badge-off">OFF</span>
+            </div>
+            <div class="device-indicator" id="ind-fan-set2" role="status" aria-label="Fan Set 2 status">
+              <span class="device-icon" aria-hidden="true">💨</span>
+              <span class="device-label">Fan Set 2</span>
               <span class="device-badge badge-off">OFF</span>
             </div>
             <div class="device-indicator" id="ind-pump" role="status" aria-label="Water pump status">
@@ -295,14 +300,24 @@
     <section id="page-control" class="page hidden" aria-label="Device control">
       <div class="control-notice" id="control-notice"></div>
       <div class="control-grid" id="control-grid">
-        <!-- Fan -->
-        <div class="control-card glass" id="ctrl-fan" style="--ctrl-color: rgba(59,130,246,.08);">
+        <!-- Fan Set 1 -->
+        <div class="control-card glass" id="ctrl-fan-set1" style="--ctrl-color: rgba(59,130,246,.08);">
           <div class="ctrl-icon-wrap" aria-hidden="true">💨</div>
-          <div class="ctrl-title">Fan</div>
-          <p class="ctrl-status" id="ctrl-fan-status">—</p>
+          <div class="ctrl-title">Fan Set 1</div>
+          <p class="ctrl-status" id="ctrl-fan-set1-status">—</p>
           <div class="ctrl-btns">
-            <button id="ctrl-fan-on"  class="btn-on"  onclick="sendControl('fan','on')"  aria-label="Turn fan on">ON</button>
-            <button id="ctrl-fan-off" class="btn-off" onclick="sendControl('fan','off')" aria-label="Turn fan off">OFF</button>
+            <button id="ctrl-fan-set1-on"  class="btn-on"  onclick="sendControl('fan_set1','on')"  aria-label="Turn fan set 1 on">ON</button>
+            <button id="ctrl-fan-set1-off" class="btn-off" onclick="sendControl('fan_set1','off')" aria-label="Turn fan set 1 off">OFF</button>
+          </div>
+        </div>
+        <!-- Fan Set 2 -->
+        <div class="control-card glass" id="ctrl-fan-set2" style="--ctrl-color: rgba(59,130,246,.08);">
+          <div class="ctrl-icon-wrap" aria-hidden="true">💨</div>
+          <div class="ctrl-title">Fan Set 2</div>
+          <p class="ctrl-status" id="ctrl-fan-set2-status">—</p>
+          <div class="ctrl-btns">
+            <button id="ctrl-fan-set2-on"  class="btn-on"  onclick="sendControl('fan_set2','on')"  aria-label="Turn fan set 2 on">ON</button>
+            <button id="ctrl-fan-set2-off" class="btn-off" onclick="sendControl('fan_set2','off')" aria-label="Turn fan set 2 off">OFF</button>
           </div>
         </div>
         <!-- Pump -->
@@ -358,7 +373,7 @@
               <div class="field-row">
                 <div class="field-group">
                   <label for="sched-device">Device</label>
-                  <select id="sched-device" required aria-required="true">
+                  <select id="sched-device" required aria-required="true" onchange="toggleFanTarget()">
                     <option value="fan">💨 Fan</option>
                     <option value="pump">💧 Water Pump</option>
                     <option value="light">💡 Light</option>
@@ -371,6 +386,15 @@
                     <option value="off">Turn OFF</option>
                   </select>
                 </div>
+              </div>
+              <!-- Fan target selector (only for fan device) -->
+              <div id="sched-fan-target-fields" class="field-group">
+                <label for="sched-fan-target">Fan Target</label>
+                <select id="sched-fan-target">
+                  <option value="all">All Sets</option>
+                  <option value="set1">Set 1 Only</option>
+                  <option value="set2">Set 2 Only</option>
+                </select>
               </div>
               <div class="field-group">
                 <label for="sched-condition">Trigger Type</label>

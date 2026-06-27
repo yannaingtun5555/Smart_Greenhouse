@@ -46,7 +46,7 @@ def build_schedule_payload(greenhouse) -> list:
     from core.apps.schedules.models import Schedule
 
     schedules = Schedule.objects.filter(greenhouse=greenhouse).values(
-        'id', 'device_type', 'condition_type',
+        'id', 'device_type', 'fan_target', 'condition_type',
         'time_of_day', 'sensor_name', 'operator', 'threshold', 'action',
     )
     payload_list = []

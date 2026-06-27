@@ -56,7 +56,8 @@ CREATE TABLE greenhouses_devicestate (
     greenhouse_id INTEGER PRIMARY KEY
         REFERENCES greenhouses_greenhouse(id) ON DELETE CASCADE,
 
-    fan BOOLEAN NOT NULL DEFAULT FALSE,
+    fan_set1 BOOLEAN NOT NULL DEFAULT FALSE,
+    fan_set2 BOOLEAN NOT NULL DEFAULT FALSE,
     water_pump BOOLEAN NOT NULL DEFAULT FALSE,
     light BOOLEAN NOT NULL DEFAULT FALSE,
 
@@ -78,6 +79,10 @@ CREATE TABLE schedules_schedule (
 
     device_type VARCHAR(20) NOT NULL
         CHECK (device_type IN ('fan','pump','light')),
+
+    -- Fan set selector (only applicable when device_type = 'fan')
+    fan_target VARCHAR(10)
+        CHECK (fan_target IN ('all','set1','set2')),
 
     condition_type VARCHAR(10) NOT NULL
         CHECK (condition_type IN ('time','sensor')),

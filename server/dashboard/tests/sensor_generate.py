@@ -115,7 +115,8 @@ class ControlledGreenhouseSimulator:
 
         # Device state (initial all off)
         self.device_state = {
-            "fan": False,
+            "fan_set1": False,
+            "fan_set2": False,
             "water_pump": False,
             "light": False,
             "energy_state": "battery",
@@ -171,7 +172,18 @@ class ControlledGreenhouseSimulator:
 
         enabled = (action == "on")
         if device == "fan":
-            self.device_state["fan"] = enabled
+            fan_target = data.get("fan_target", "all")
+            if fan_target == "set1":
+                self.device_state["fan_set1"] = enabled
+            elif fan_target == "set2":
+                self.device_state["fan_set2"] = enabled
+            else:
+                self.device_state["fan_set1"] = enabled
+                self.device_state["fan_set2"] = enabled
+        elif device == "fan_set1":
+            self.device_state["fan_set1"] = enabled
+        elif device == "fan_set2":
+            self.device_state["fan_set2"] = enabled
         elif device == "pump":
             self.device_state["water_pump"] = enabled
         elif device == "light":

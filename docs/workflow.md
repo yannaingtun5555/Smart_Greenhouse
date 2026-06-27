@@ -58,13 +58,16 @@ ESP32 Boot → Check for token → If no token → HTTP POST /api/v1/devices/reg
 
 6. Actuator Control
 
-    Fan: Digital output (HIGH = ON)
+    Fan Set 1 & Fan Set 2: Digital output (HIGH = ON)
 
     Light: Digital output (HIGH = ON)
 
     Water Pump: Digital output (HIGH = ON)
 
     Control: Via MQTT commands or scheduled automation
+
+    Fan schedules select a target: all / set1 / set2.
+    The MQTT cmd payload for a fan schedule carries a "fan_target" field.
 
 esp32-greenhouse/
 ├── src/

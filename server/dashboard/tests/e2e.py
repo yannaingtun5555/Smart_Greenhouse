@@ -444,7 +444,8 @@ class TestGreenhouseFullFlow:
         topic = f"gh/{SERIAL}/state"
         payload = {
             "token": token,
-            "fan": True,
+            "fan_set1": True,
+            "fan_set2": False,
             "water_pump": False,
             "light": True,
             "energy_state": "grid",
@@ -457,10 +458,11 @@ class TestGreenhouseFullFlow:
         r = self.api.get(f"/api/v1/greenhouses/{self.__class__.gh_id}/state/")
         assert r.status_code == 200, r.text
         state = r.json()
-        assert state["fan"] is True, f"Expected fan=True: {state}"
+        assert state["fan_set1"] is True, f"Expected fan_set1=True: {state}"
+        assert state["fan_set2"] is False, f"Expected fan_set2=False: {state}"
         assert state["light"] is True, f"Expected light=True: {state}"
         assert state["energy_state"] == "grid", f"Expected grid: {state}"
-        print(f"\n✅  Device state from MQTT verified in DB: fan={state['fan']} light={state['light']}")
+        print(f"\n✅  Device state from MQTT verified in DB: fan_set1={state['fan_set1']} fan_set2={state['fan_set2']} light={state['light']}")
 
     # -----------------------------------------------------------------------
     # Step 10: FE sends control command → server → MQTT cmd → ESP32
@@ -493,13 +495,13 @@ class TestGreenhouseFullFlow:
 
         # FE sends control
         r = self.api.patch(f"/api/v1/greenhouses/{self.__class__.gh_id}/control/", json={
-            "device": "fan",
+            "device": "fan_set1",
             "action": "on",
         })
         assert r.status_code == 200, f"Control failed: {r.text}"
         resp = r.json()
         assert resp["mqtt_sent"] is True, "MQTT send reported False"
-        assert resp["state"]["fan"] is True, "DB state not updated"
+        assert resp["state"]["fan_set1"] is True, "DB state not updated"
 
         # Wait for MQTT subscription to receive the cmd
         deadline = time.time() + 3
@@ -509,7 +511,7 @@ class TestGreenhouseFullFlow:
 
         assert cmd_received.get("data"), "Did not receive control cmd on MQTT"
         cmd = cmd_received["data"]
-        assert cmd["device"] == "fan", f"Device mismatch: {cmd}"
+        assert cmd["device"] == "fan_set1", f"Device mismatch: {cmd}"
         assert cmd["action"] == "on", f"Action mismatch: {cmd}"
         print(f"\n✅  Control command verified: MQTT cmd received {cmd}")
 
@@ -545,6 +547,7 @@ class TestGreenhouseFullFlow:
         # FE creates a time-based schedule
         r = self.api.post(f"/api/v1/greenhouses/{self.__class__.gh_id}/schedules/", json={
             "device_type": "fan",
+            "fan_target": "set1",
             "condition_type": "time",
             "time_of_day": "06:00",
             "action": "on",
@@ -552,6 +555,7 @@ class TestGreenhouseFullFlow:
         assert r.status_code == 201, f"Schedule create failed: {r.text}"
         sched = r.json()
         assert sched["device_type"] == "fan"
+        assert sched["fan_target"] == "set1"
         assert sched["time_of_day"] == "06:00:00"
 
         # Wait for MQTT schedule push
@@ -951,11 +955,20 @@ class TestAPIValidation:
         # Activate via device register
         requests.post(f"{BASE_URL}/api/v1/devices/register/", json={"serial_number": serial})
 
+        # Test old "fan" device name should be rejected (now fan_set1/fan_set2)
         r2 = self.api.patch(f"/api/v1/greenhouses/{gh_id}/control/", json={
+            "device": "fan",
+            "action": "on",
+        })
+        assert r2.status_code == 400, f"Expected 400 for invalid device 'fan', got {r2.status_code}"
+        print("\n✅  Old 'fan' device name correctly rejected (400)")
+
+        # Test completely unknown device
+        r3 = self.api.patch(f"/api/v1/greenhouses/{gh_id}/control/", json={
             "device": "unknown_device",
             "action": "on",
         })
-        assert r2.status_code == 400, f"Expected 400 for invalid device, got {r2.status_code}"
+        assert r3.status_code == 400, f"Expected 400 for invalid device, got {r3.status_code}"
         print("\n✅  Invalid control device correctly rejected (400)")
 
     def test_schedule_time_missing_time_of_day(self):
@@ -977,3 +990,54 @@ class TestAPIValidation:
         })
         assert r2.status_code == 400, f"Expected 400 for missing time_of_day, got {r2.status_code}"
         print("\n✅  Missing time_of_day correctly rejected (400)")
+
+    def test_fan_set2_control_and_schedule_fan_target(self):
+        """Test fan_set2 control and schedule with fan_target=set2."""
+        self._ensure_logged_in()
+        serial = f"FAN2-{uuid.uuid4().hex[:6]}"
+        r = self.api.post("/api/v1/greenhouses/", json={
+            "name": "Fan Set 2 Test GH",
+            "serial_number": serial,
+        })
+        assert r.status_code == 201
+        gh_id = r.json()["id"]
+
+        # Activate
+        requests.post(f"{BASE_URL}/api/v1/devices/register/", json={"serial_number": serial})
+
+        # Control fan_set2 on
+        r2 = self.api.patch(f"/api/v1/greenhouses/{gh_id}/control/", json={
+            "device": "fan_set2",
+            "action": "on",
+        })
+        assert r2.status_code == 200, f"fan_set2 control failed: {r2.text}"
+        assert r2.json()["state"]["fan_set2"] is True
+        print("\n✅  Fan set 2 control works correctly")
+
+        # Create schedule targeting fan set2
+        r3 = self.api.post(f"/api/v1/greenhouses/{gh_id}/schedules/", json={
+            "device_type": "fan",
+            "fan_target": "set2",
+            "condition_type": "sensor",
+            "sensor_name": "temperature",
+            "operator": ">",
+            "threshold": 35.0,
+            "action": "on",
+        })
+        assert r3.status_code == 201, f"Schedule create failed: {r3.text}"
+        sched = r3.json()
+        assert sched["fan_target"] == "set2"
+        print("\n✅  Schedule with fan_target=set2 created correctly")
+
+        # Create schedule targeting all fan sets
+        r4 = self.api.post(f"/api/v1/greenhouses/{gh_id}/schedules/", json={
+            "device_type": "fan",
+            "fan_target": "all",
+            "condition_type": "time",
+            "time_of_day": "18:00",
+            "action": "off",
+        })
+        assert r4.status_code == 201, f"Schedule create failed: {r4.text}"
+        assert r4.json()["fan_target"] == "all"
+        print("\n✅  Schedule with fan_target=all created correctly")
+

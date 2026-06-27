@@ -5,7 +5,7 @@ import {
   handleAddGh, handleCreateSchedule, handleGhChange,
   navigateTo, openAddGhModal, openScheduleModal,
   closeGhModal, closeScheduleModal,
-  sendControlAction, toggleScheduleCondition,
+  sendControlAction, toggleScheduleCondition, toggleFanTarget,
   loadSensorHistory, loadSchedules,
   bootstrapApp, loadAnalytics, renderProfilePage,
 } from './features/greenhouses.js';
@@ -147,6 +147,7 @@ const globals = {
   },
   sendControl: sendControlAction,
   toggleScheduleCondition,
+  toggleFanTarget,
   openScheduleModal,
   closeScheduleModal,
   openAddGhModal,
@@ -176,6 +177,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ghSelect     = $('gh-select');
   const sensorLimit  = $('sensor-limit');
   const schedCond    = $('sched-condition');
+  const schedDevice  = $('sched-device');
   const profileForm  = $('profile-form');
   
   // MODAL EVENT LISTENERS - FIXED
@@ -215,6 +217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (ghSelect)     ghSelect.addEventListener('change', handleGhChange);
   if (sensorLimit)  sensorLimit.addEventListener('change', loadSensorHistory);
   if (schedCond)    schedCond.addEventListener('change', toggleScheduleCondition);
+  if (schedDevice)  schedDevice.addEventListener('change', toggleFanTarget);
   if (profileForm)  profileForm.addEventListener('submit', handleProfileUpdate);
 
   // Escape key closes modals and sidebar
@@ -228,6 +231,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize
   toggleScheduleCondition();
+  toggleFanTarget();
   renderAuthMode('login');
   setActiveScreen(false);
 

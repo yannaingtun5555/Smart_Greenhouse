@@ -23,6 +23,16 @@ class Schedule(models.Model):
         (DEVICE_LIGHT, 'Light'),
     ]
 
+    # Fan target (only applicable when device_type = 'fan')
+    FAN_TARGET_ALL = 'all'
+    FAN_TARGET_SET1 = 'set1'
+    FAN_TARGET_SET2 = 'set2'
+    FAN_TARGET_CHOICES = [
+        (FAN_TARGET_ALL, 'All Sets'),
+        (FAN_TARGET_SET1, 'Set 1'),
+        (FAN_TARGET_SET2, 'Set 2'),
+    ]
+
     # Condition types
     CONDITION_TIME = 'time'
     CONDITION_SENSOR = 'sensor'
@@ -66,6 +76,14 @@ class Schedule(models.Model):
         related_name='schedules',
     )
     device_type = models.CharField(max_length=20, choices=DEVICE_CHOICES)
+    fan_target = models.CharField(
+        max_length=10,
+        choices=FAN_TARGET_CHOICES,
+        default=FAN_TARGET_ALL,
+        null=True,
+        blank=True,
+        help_text='Which fan set to control (only when device_type=fan).',
+    )
     condition_type = models.CharField(max_length=10, choices=CONDITION_CHOICES)
 
     # Time-based fields

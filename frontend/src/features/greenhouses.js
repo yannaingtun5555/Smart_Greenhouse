@@ -169,7 +169,8 @@ function renderDeviceState() {
 
   // Overview indicators
   [
-    ['fan',        'ind-fan'],
+    ['fan_set1',   'ind-fan-set1'],
+    ['fan_set2',   'ind-fan-set2'],
     ['water_pump', 'ind-pump'],
     ['light',      'ind-light'],
   ].forEach(([key, id]) => {
@@ -192,7 +193,8 @@ function renderDeviceState() {
 
   // Control page button highlight
   [
-    ['fan',        'ctrl-fan',   'ctrl-fan-status'],
+    ['fan_set1',   'ctrl-fan-set1',   'ctrl-fan-set1-status'],
+    ['fan_set2',   'ctrl-fan-set2',   'ctrl-fan-set2-status'],
     ['water_pump', 'ctrl-pump',  'ctrl-pump-status'],
     ['light',      'ctrl-light', 'ctrl-light-status'],
   ].forEach(([key, cardId, statusId]) => {
@@ -317,8 +319,18 @@ function renderSchedules() {
   }
 
   const deviceIcons = { fan: '💨', pump: '💧', light: '💡' };
+  const fanTargetLabels = { set1: '💨 Fan Set 1', set2: '💨 Fan Set 2', all: '💨 All Fan Sets' };
   container.innerHTML = state.schedules.map((item) => {
     const icon = deviceIcons[item.device_type] || '⚙️';
+    const isFanSchedule = item.device_type === 'fan';
+    const fanTarget = item.fan_target || 'all';
+
+    // Build device title with fan target badge
+    let deviceTitle = escapeHtml(titleCase(item.device_type));
+    if (isFanSchedule && fanTarget !== 'all') {
+      deviceTitle += ` <span class="sched-fan-target-badge">${fanTarget === 'set1' ? 'Set 1' : 'Set 2'}</span>`;
+    }
+
     const condText = item.condition_type === 'time'
       ? `⏰ Daily at ${escapeHtml(item.time_of_day || '—')}`
       : `📡 When ${escapeHtml(item.sensor_name || '')} ${escapeHtml(item.operator || '')} ${escapeHtml(String(item.threshold ?? ''))}`;
@@ -328,7 +340,7 @@ function renderSchedules() {
         <div class="sched-icon-wrap" aria-hidden="true">${icon}</div>
         <div class="sched-info">
           <div class="sched-title">
-            ${escapeHtml(titleCase(item.device_type))}
+            ${deviceTitle}
             <span class="sched-action-badge ${item.action === 'on' ? 'badge-action-on' : 'badge-action-off'}">
               ${escapeHtml(safeUpper(item.action, '—'))}
             </span>
@@ -608,7 +620,7 @@ export async function sendControlAction(device, action) {
     }
   }
 
-  const deviceLabel = { fan: 'Fan', pump: 'Water Pump', light: 'Light' };
+  const deviceLabel = { fan_set1: 'Fan Set 1', fan_set2: 'Fan Set 2', pump: 'Water Pump', light: 'Light' };
 
   try {
     await sendControl(greenhouse.id, device, action);
@@ -644,6 +656,15 @@ export function toggleScheduleCondition() {
   const sensorFields = $('sched-sensor-fields');
   if (timeFields)   timeFields.classList.toggle('hidden', !isTime);
   if (sensorFields) sensorFields.classList.toggle('hidden', isTime);
+}
+
+// ── Toggle fan target selector visibility ──
+export function toggleFanTarget() {
+  const device = $('sched-device')?.value;
+  const fanTargetFields = $('sched-fan-target-fields');
+  if (fanTargetFields) {
+    fanTargetFields.classList.toggle('hidden', device !== 'fan');
+  }
 }
 
 // ── Modal handlers ──
@@ -706,11 +727,17 @@ export async function handleCreateSchedule(event) {
   if (!greenhouse) { setError('schedule-modal-error', 'Select a greenhouse first.'); return; }
 
   const condition = $('sched-condition')?.value;
+  const deviceType = $('sched-device')?.value;
   const payload = {
-    device_type:    $('sched-device')?.value,
+    device_type:    deviceType,
     action:         $('sched-action')?.value,
     condition_type: condition,
   };
+
+  // Include fan_target when device is fan
+  if (deviceType === 'fan') {
+    payload.fan_target = $('sched-fan-target')?.value || 'all';
+  }
   if (condition === 'time') {
     payload.time_of_day = $('sched-time')?.value;
   } else {

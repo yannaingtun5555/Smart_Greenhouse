@@ -165,14 +165,15 @@ class ControlView(APIView):
     """
     PATCH /api/v1/greenhouses/{id}/control/
 
-    Body: {"device": "fan|pump|light", "action": "on|off"}
+    Body: {"device": "fan_set1|fan_set2|pump|light", "action": "on|off"}
 
     Pushes an MQTT command to the ESP32 and updates the DeviceState in DB.
     """
     permission_classes = [IsAuthenticated]
 
     DEVICE_TO_FIELD = {
-        'fan': 'fan',
+        'fan_set1': 'fan_set1',
+        'fan_set2': 'fan_set2',
         'pump': 'water_pump',
         'light': 'light',
     }
