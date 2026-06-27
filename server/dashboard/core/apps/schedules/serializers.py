@@ -7,7 +7,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Schedule
         fields = [
-            'id', 'greenhouse', 'device_type', 'condition_type',
+            'id', 'greenhouse', 'device_type', 'fan_target', 'condition_type',
             'time_of_day', 'sensor_name', 'operator', 'threshold',
             'action', 'created_at',
         ]
@@ -17,6 +17,13 @@ class ScheduleSerializer(serializers.ModelSerializer):
         condition_type = attrs.get('condition_type')
         if condition_type is None and self.instance is not None:
             condition_type = self.instance.condition_type
+
+        # fan_target only makes sense for fan devices; clear it otherwise.
+        device_type = attrs.get('device_type')
+        if device_type is None and self.instance is not None:
+            device_type = self.instance.device_type
+        if device_type != Schedule.DEVICE_FAN:
+            attrs['fan_target'] = None
 
         if condition_type == Schedule.CONDITION_TIME:
             if not attrs.get('time_of_day'):

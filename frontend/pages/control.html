@@ -1,0 +1,62 @@
+<!-- PAGE: Control -->
+<section id="page-control" class="page hidden" aria-label="Device Control" data-page-fragment="ready">
+  <div class="schedules-header">
+    <div class="page-section-header">
+      <h2>Device Control</h2>
+      <p>Manually control greenhouse devices in real-time</p>
+    </div>
+    <div id="last-refresh" class="last-refresh muted" style="font-size:.8rem;"></div>
+  </div>
+
+  <div id="control-notice" class="control-notice notice-warn" aria-live="polite">
+    Select an active greenhouse to control devices.
+  </div>
+
+  <div class="control-grid">
+    <!-- Fan Set 1 -->
+    <div class="control-card glass" id="ctrl-fan-set1">
+      <div class="ctrl-icon-wrap" aria-hidden="true">💨</div>
+      <div class="ctrl-title">Fan Set 1</div>
+      <div class="ctrl-status" id="ctrl-fan-set1-status">○ Stopped</div>
+      <div class="ctrl-btns">
+        <button id="ctrl-fan-set1-on"  class="btn-on"  onclick="sendControl('fan_set1','on')"  aria-label="Fan Set 1 ON">ON</button>
+        <button id="ctrl-fan-set1-off" class="btn-off" onclick="sendControl('fan_set1','off')" aria-label="Fan Set 1 OFF">OFF</button>
+      </div>
+    </div>
+
+    <!-- Fan Set 2 -->
+    <div class="control-card glass" id="ctrl-fan-set2">
+      <div class="ctrl-icon-wrap" aria-hidden="true">💨</div>
+      <div class="ctrl-title">Fan Set 2</div>
+      <div class="ctrl-status" id="ctrl-fan-set2-status">○ Stopped</div>
+      <div class="ctrl-btns">
+        <button id="ctrl-fan-set2-on"  class="btn-on"  onclick="sendControl('fan_set2','on')"  aria-label="Fan Set 2 ON">ON</button>
+        <button id="ctrl-fan-set2-off" class="btn-off" onclick="sendControl('fan_set2','off')" aria-label="Fan Set 2 OFF">OFF</button>
+      </div>
+    </div>
+
+    <!-- Water Pump -->
+    <div class="control-card glass" id="ctrl-pump">
+      <div class="ctrl-icon-wrap" aria-hidden="true">💧</div>
+      <div class="ctrl-title">Water Pump</div>
+      <div class="ctrl-status" id="ctrl-pump-status">○ Stopped</div>
+      <div class="ctrl-btns">
+        <button id="ctrl-pump-on"  class="btn-on"  onclick="sendControl('pump','on')"  aria-label="Water Pump ON">ON</button>
+        <button id="ctrl-pump-off" class="btn-off" onclick="sendControl('pump','off')" aria-label="Water Pump OFF">OFF</button>
+      </div>
+    </div>
+
+    <!-- Light -->
+    <div class="control-card glass" id="ctrl-light">
+      <div class="ctrl-icon-wrap" aria-hidden="true">💡</div>
+      <div class="ctrl-title">Light</div>
+      <div class="ctrl-status" id="ctrl-light-status">○ Stopped</div>
+      <div class="ctrl-btns">
+        <button id="ctrl-light-on"  class="btn-on"  onclick="sendControl('light','on')"  aria-label="Light ON">ON</button>
+        <button id="ctrl-light-off" class="btn-off" onclick="sendControl('light','off')" aria-label="Light OFF">OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ctrl-feedback" class="ctrl-feedback hidden" aria-live="polite"></div>
+</section>

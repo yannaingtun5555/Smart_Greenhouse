@@ -1,14 +1,24 @@
 import { $ } from './core/dom.js';
 import { getAccessToken, setApiBase, updateMe } from './core/api.js';
 import { renderAuthMode, setActiveScreen, showToast } from './core/ui.js';
+import { loadPageFragments } from './core/page-loader.js';
+import { initMicroFeatures, updateLastSync } from './core/micro.js';
 import {
-  handleAddGh, handleCreateSchedule, handleGhChange,
-  navigateTo, openAddGhModal, openScheduleModal,
+  handleAddGh, handleGhChange,
+  navigateTo as goToPage, openAddGhModal, openScheduleModal,
   closeGhModal, closeScheduleModal,
   sendControlAction, toggleScheduleCondition, toggleFanTarget,
-  loadSensorHistory, loadSchedules,
-  bootstrapApp, loadAnalytics, renderProfilePage,
+  loadSensorHistory,
+  bootstrapApp,
 } from './features/greenhouses.js';
+import { loadAnalytics } from './pages/analytics.js';
+import { renderProfilePage } from './pages/profile.js';
+import {
+  handleCreateSchedule,
+  loadSchedules,
+  openScheduleDetails,
+  closeScheduleDetails,
+} from './pages/schedules.js';
 import { handleLogout, handleLogin, handleRegister, switchTab, restoreSession } from './features/auth.js';
 import { state } from './core/store.js';
 import { me } from './core/api.js';
@@ -136,12 +146,15 @@ const globals = {
   handleLogout,
   navigateTo: (page) => {
     closeMobileSidebar(); // Close sidebar when navigating
-    navigateTo(page);
+    goToPage(page);
   },
   handleGhChange,
   refreshData: async () => {
     setRefreshSpin(true);
-    try { await bootstrapApp(); } finally {
+    try {
+      await bootstrapApp();
+      updateLastSync();
+    } finally {
       setTimeout(() => setRefreshSpin(false), 600);
     }
   },
@@ -150,6 +163,8 @@ const globals = {
   toggleFanTarget,
   openScheduleModal,
   closeScheduleModal,
+  openScheduleDetails,
+  closeScheduleDetails,
   openAddGhModal,
   closeGhModal,
   handleAddGh,
@@ -170,7 +185,8 @@ Object.assign(window, globals);
 document.addEventListener('DOMContentLoaded', async () => {
   // Apply saved theme
   applyTheme(getTheme());
-
+  await loadPageFragments();
+  initMicroFeatures();
   // Event listeners
   const registerForm = $('register-form');
   const loginForm    = $('login-form');
@@ -183,6 +199,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // MODAL EVENT LISTENERS - FIXED
   const ghModal = $('gh-modal');
   const scheduleModal = $('schedule-modal');
+  const scheduleDetailsModal = $('schedule-details-modal');
   
   // Add click handlers for modal backdrops
   if (ghModal) {
@@ -199,6 +216,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Close only if clicking the backdrop itself (not the modal card)
       if (e.target === this) {
         closeScheduleModal();
+      }
+    });
+  }
+
+  if (scheduleDetailsModal) {
+    scheduleDetailsModal.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeScheduleDetails();
       }
     });
   }
