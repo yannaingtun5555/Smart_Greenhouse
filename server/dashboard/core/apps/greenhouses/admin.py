@@ -20,4 +20,4 @@ class SensorDataAdmin(admin.ModelAdmin):
 
 @admin.register(DeviceState)
 class DeviceStateAdmin(admin.ModelAdmin):
-    list_display = ['greenhouse', 'fan', 'water_pump', 'light', 'energy_state', 'updated_at']
+    list_display = ['greenhouse', 'fan_set1', 'fan_set2', 'water_pump', 'light', 'energy_state', 'updated_at']

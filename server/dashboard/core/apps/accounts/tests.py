@@ -52,7 +52,9 @@ class GreenhouseAPITests(APITestCase):
 
         response = self.client.get(create_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
+        # List endpoint returns a plain list (no pagination wrapper)
+        data = response.data if isinstance(response.data, list) else response.data['results']
+        self.assertEqual(len(data), 1)
 
     def test_soft_delete_greenhouse(self):
         gh = Greenhouse.objects.create(

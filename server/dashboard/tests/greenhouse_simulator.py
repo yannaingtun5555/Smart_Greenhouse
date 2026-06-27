@@ -164,7 +164,8 @@ class GreenhouseSimulator:
         self.client.on_message = self._on_message
 
         self.last_state = {
-            "fan": False,
+            "fan_set1": False,
+            "fan_set2": False,
             "water_pump": False,
             "light": False,
             "energy_state": "battery",
@@ -209,10 +210,21 @@ class GreenhouseSimulator:
         self.flash_path.write_text(json.dumps(schedules, indent=2))
         logger.info('Saved %d schedule(s) to flash: %s', len(schedules), self.flash_path)
 
-    def _apply_local_control(self, device: str, action: str, reason: str = 'control'):
+    def _apply_local_control(self, device: str, action: str, reason: str = 'control', fan_target=None):
         enabled = action == 'on'
         if device == 'fan':
-            self.last_state['fan'] = enabled
+            # Fan schedule fired: fan_target selects all / set1 / set2
+            if fan_target == 'set1':
+                self.last_state['fan_set1'] = enabled
+            elif fan_target == 'set2':
+                self.last_state['fan_set2'] = enabled
+            else:  # 'all' or unspecified
+                self.last_state['fan_set1'] = enabled
+                self.last_state['fan_set2'] = enabled
+        elif device == 'fan_set1':
+            self.last_state['fan_set1'] = enabled
+        elif device == 'fan_set2':
+            self.last_state['fan_set2'] = enabled
         elif device == 'pump':
             self.last_state['water_pump'] = enabled
         elif device == 'light':
@@ -220,7 +232,7 @@ class GreenhouseSimulator:
         else:
             logger.warning('Unknown device: %s', device)
             return
-        logger.info('[%s] %s -> %s', reason, device, action)
+        logger.info('[%s] %s -> %s (fan_target=%s)', reason, device, action, fan_target)
         self.publish_state()
 
     def _evaluate_sensor_schedules(self, snapshot: SensorSnapshot):
@@ -239,7 +251,9 @@ class GreenhouseSimulator:
             try:
                 if compare(float(reading), float(rule['threshold'])):
                     self._apply_local_control(
-                        rule['device_type'], rule['action'], reason='sensor-schedule'
+                        rule['device_type'], rule['action'],
+                        reason='sensor-schedule',
+                        fan_target=rule.get('fan_target'),
                     )
             except (TypeError, ValueError):
                 continue
@@ -269,7 +283,9 @@ class GreenhouseSimulator:
                 hour, minute = int(parts[0]), int(parts[1])
                 if hour == now.hour and minute == now.minute:
                     self._apply_local_control(
-                        rule['device_type'], rule['action'], reason='time-schedule'
+                        rule['device_type'], rule['action'],
+                        reason='time-schedule',
+                        fan_target=rule.get('fan_target'),
                     )
                     if rule_id is not None:
                         self._fired_time_minute.add(rule_id)
@@ -333,7 +349,19 @@ class GreenhouseSimulator:
 
         enabled = action == "on"
         if device == "fan":
-            self.last_state["fan"] = enabled
+            # Fan schedule command with fan_target
+            fan_target = data.get("fan_target", "all")
+            if fan_target == "set1":
+                self.last_state["fan_set1"] = enabled
+            elif fan_target == "set2":
+                self.last_state["fan_set2"] = enabled
+            else:  # "all"
+                self.last_state["fan_set1"] = enabled
+                self.last_state["fan_set2"] = enabled
+        elif device == "fan_set1":
+            self.last_state["fan_set1"] = enabled
+        elif device == "fan_set2":
+            self.last_state["fan_set2"] = enabled
         elif device == "pump":
             self.last_state["water_pump"] = enabled
         elif device == "light":

@@ -174,11 +174,12 @@ def evaluate_sensor_schedules(greenhouse_id, serial, sensor_payload, client):
             continue
 
         if condition_met:
-            _publish_command(client, serial, rule.device_type, rule.action)
+            fan_target = getattr(rule, 'fan_target', None)
+            _publish_command(client, serial, rule.device_type, rule.action, fan_target=fan_target)
             logger.info(
-                'Sensor schedule fired: gh=%s | %s %s %s → %s %s',
+                'Sensor schedule fired: gh=%s | %s %s %s → %s %s (fan_target=%s)',
                 serial, rule.sensor_name, rule.operator, rule.threshold,
-                rule.device_type, rule.action,
+                rule.device_type, rule.action, fan_target,
             )
 
 
@@ -218,11 +219,12 @@ def time_schedule_dispatcher(client):
                 tod = rule.time_of_day
                 if tod and tod.hour == now.hour and tod.minute == now.minute:
                     serial = rule.greenhouse.serial_number
-                    _publish_command(client, serial, rule.device_type, rule.action)
+                    fan_target = getattr(rule, 'fan_target', None)
+                    _publish_command(client, serial, rule.device_type, rule.action, fan_target=fan_target)
                     _fired_this_minute.add(rule.id)
                     logger.info(
-                        'Time schedule fired: id=%d serial=%s %s → %s %s',
-                        rule.id, serial, tod, rule.device_type, rule.action,
+                        'Time schedule fired: id=%d serial=%s %s → %s %s (fan_target=%s)',
+                        rule.id, serial, tod, rule.device_type, rule.action, fan_target,
                     )
         except Exception as exc:
             logger.error('Time schedule dispatcher error: %s', exc)
@@ -232,10 +234,13 @@ def time_schedule_dispatcher(client):
 # MQTT callbacks
 # ---------------------------------------------------------------------------
 
-def _publish_command(client, serial, device, action):
+def _publish_command(client, serial, device, action, fan_target=None):
     """Publish a control command to the ESP32."""
     topic = f'gh/{serial}/cmd'
-    payload = json.dumps({'device': device, 'action': action})
+    cmd = {'device': device, 'action': action}
+    if fan_target:
+        cmd['fan_target'] = fan_target
+    payload = json.dumps(cmd)
     client.publish(topic, payload, qos=1)
 
 
@@ -350,7 +355,8 @@ def on_message(client, userdata, msg):
         DeviceState.objects.update_or_create(
             greenhouse=greenhouse,
             defaults={
-                'fan': bool(payload.get('fan', False)),
+                'fan_set1': bool(payload.get('fan_set1', False)),
+                'fan_set2': bool(payload.get('fan_set2', False)),
                 'water_pump': bool(payload.get('water_pump', False)),
                 'light': bool(payload.get('light', False)),
                 **({'energy_state': payload['energy_state']}

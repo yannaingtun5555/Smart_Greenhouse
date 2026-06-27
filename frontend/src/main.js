@@ -1,14 +1,24 @@
 import { $ } from './core/dom.js';
 import { getAccessToken, setApiBase, updateMe } from './core/api.js';
 import { renderAuthMode, setActiveScreen, showToast } from './core/ui.js';
+import { loadPageFragments } from './core/page-loader.js';
+import { initMicroFeatures, updateLastSync } from './core/micro.js';
 import {
-  handleAddGh, handleCreateSchedule, handleGhChange,
-  navigateTo, openAddGhModal, openScheduleModal,
+  handleAddGh, handleGhChange,
+  navigateTo as goToPage, openAddGhModal, openScheduleModal,
   closeGhModal, closeScheduleModal,
-  sendControlAction, toggleScheduleCondition,
-  loadSensorHistory, loadSchedules,
-  bootstrapApp, loadAnalytics, renderProfilePage,
+  sendControlAction, toggleScheduleCondition, toggleFanTarget,
+  loadSensorHistory,
+  bootstrapApp,
 } from './features/greenhouses.js';
+import { loadAnalytics } from './pages/analytics.js';
+import { renderProfilePage } from './pages/profile.js';
+import {
+  handleCreateSchedule,
+  loadSchedules,
+  openScheduleDetails,
+  closeScheduleDetails,
+} from './pages/schedules.js';
 import { handleLogout, handleLogin, handleRegister, switchTab, restoreSession } from './features/auth.js';
 import { state } from './core/store.js';
 import { me } from './core/api.js';
@@ -136,19 +146,25 @@ const globals = {
   handleLogout,
   navigateTo: (page) => {
     closeMobileSidebar(); // Close sidebar when navigating
-    navigateTo(page);
+    goToPage(page);
   },
   handleGhChange,
   refreshData: async () => {
     setRefreshSpin(true);
-    try { await bootstrapApp(); } finally {
+    try {
+      await bootstrapApp();
+      updateLastSync();
+    } finally {
       setTimeout(() => setRefreshSpin(false), 600);
     }
   },
   sendControl: sendControlAction,
   toggleScheduleCondition,
+  toggleFanTarget,
   openScheduleModal,
   closeScheduleModal,
+  openScheduleDetails,
+  closeScheduleDetails,
   openAddGhModal,
   closeGhModal,
   handleAddGh,
@@ -169,18 +185,21 @@ Object.assign(window, globals);
 document.addEventListener('DOMContentLoaded', async () => {
   // Apply saved theme
   applyTheme(getTheme());
-
+  await loadPageFragments();
+  initMicroFeatures();
   // Event listeners
   const registerForm = $('register-form');
   const loginForm    = $('login-form');
   const ghSelect     = $('gh-select');
   const sensorLimit  = $('sensor-limit');
   const schedCond    = $('sched-condition');
+  const schedDevice  = $('sched-device');
   const profileForm  = $('profile-form');
   
   // MODAL EVENT LISTENERS - FIXED
   const ghModal = $('gh-modal');
   const scheduleModal = $('schedule-modal');
+  const scheduleDetailsModal = $('schedule-details-modal');
   
   // Add click handlers for modal backdrops
   if (ghModal) {
@@ -200,6 +219,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
+
+  if (scheduleDetailsModal) {
+    scheduleDetailsModal.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeScheduleDetails();
+      }
+    });
+  }
   
   // SIDEBAR OVERLAY - FIXED
   const sidebarOverlay = $('sidebar-overlay');
@@ -215,6 +242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (ghSelect)     ghSelect.addEventListener('change', handleGhChange);
   if (sensorLimit)  sensorLimit.addEventListener('change', loadSensorHistory);
   if (schedCond)    schedCond.addEventListener('change', toggleScheduleCondition);
+  if (schedDevice)  schedDevice.addEventListener('change', toggleFanTarget);
   if (profileForm)  profileForm.addEventListener('submit', handleProfileUpdate);
 
   // Escape key closes modals and sidebar
@@ -228,6 +256,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize
   toggleScheduleCondition();
+  toggleFanTarget();
   renderAuthMode('login');
   setActiveScreen(false);
 

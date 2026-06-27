@@ -32,14 +32,17 @@ Payload – gh/{serial}/sensors (from ESP32):
 Payload – gh/{serial}/state (from ESP32):
   {
     "token": "<api_token>",
-    "fan": true,
+    "fan_set1": true,
+    "fan_set2": false,
     "water_pump": false,
     "light": false,
     "energy_state": "battery"  (optional)
   }
 
 Payload – gh/{serial}/cmd (published by this worker):
-  {"device": "fan", "action": "on"}
+  {"device": "fan_set1", "action": "on"}
+  When fired from a fan schedule, includes the fan set selector:
+  {"device": "fan", "action": "on", "fan_target": "set1"}
 """
 
 import json
@@ -260,7 +263,8 @@ def upsert_device_state(greenhouse_id: int, payload: dict):
     """
     # Map payload keys → DB column names
     bool_fields = {
-        'fan': 'fan',
+        'fan_set1': 'fan_set1',
+        'fan_set2': 'fan_set2',
         'water_pump': 'water_pump',
         'light': 'light',
     }
@@ -290,8 +294,8 @@ def upsert_device_state(greenhouse_id: int, payload: dict):
             cur.execute(
                 f"""
                 INSERT INTO greenhouses_devicestate
-                    (greenhouse_id, fan, water_pump, light, updated_at)
-                VALUES (%s, FALSE, FALSE, FALSE, NOW())
+                    (greenhouse_id, fan_set1, fan_set2, water_pump, light, updated_at)
+                VALUES (%s, FALSE, FALSE, FALSE, FALSE, NOW())
                 ON CONFLICT (greenhouse_id)
                 DO UPDATE SET {set_clause}
                 """,
@@ -333,7 +337,7 @@ def load_sensor_schedules(greenhouse_id: int) -> list[dict]:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, device_type, sensor_name, operator, threshold, action
+                SELECT id, device_type, fan_target, sensor_name, operator, threshold, action
                 FROM schedules_schedule
                 WHERE greenhouse_id = %s AND condition_type = 'sensor'
                 """,
@@ -351,7 +355,7 @@ def load_time_schedules() -> list[dict]:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT s.id, s.device_type, s.time_of_day, s.action,
+                SELECT s.id, s.device_type, s.fan_target, s.time_of_day, s.action,
                        g.serial_number, g.id as greenhouse_id
                 FROM schedules_schedule s
                 JOIN greenhouses_greenhouse g ON g.id = s.greenhouse_id
@@ -394,12 +398,15 @@ def evaluate_sensor_schedules(greenhouse_id: int, serial: str, sensor_payload: d
 
         if condition_met:
             cmd = {'device': rule['device_type'], 'action': rule['action']}
+            fan_target = rule.get('fan_target')
+            if fan_target:
+                cmd['fan_target'] = fan_target
             topic = f'gh/{serial}/cmd'
             mqtt_client.publish(topic, json.dumps(cmd), qos=1)
             logger.info(
-                'Sensor schedule fired: gh=%s | %s %s %s → %s %s',
+                'Sensor schedule fired: gh=%s | %s %s %s → %s %s (fan_target=%s)',
                 serial, sensor_name, rule['operator'], rule['threshold'],
-                rule['device_type'], rule['action'],
+                rule['device_type'], rule['action'], fan_target,
             )
 
 
@@ -532,12 +539,15 @@ def time_schedule_dispatcher(mqtt_client):
                 if tod.hour == now.hour and tod.minute == now.minute:
                     serial = rule['serial_number']
                     cmd = {'device': rule['device_type'], 'action': rule['action']}
+                    fan_target = rule.get('fan_target')
+                    if fan_target:
+                        cmd['fan_target'] = fan_target
                     topic = f'gh/{serial}/cmd'
                     mqtt_client.publish(topic, json.dumps(cmd), qos=1)
                     _fired_this_minute.add(schedule_id)
                     logger.info(
-                        'Time schedule fired: id=%d serial=%s %s → %s %s',
-                        schedule_id, serial, tod, rule['device_type'], rule['action'],
+                        'Time schedule fired: id=%d serial=%s %s → %s %s (fan_target=%s)',
+                        schedule_id, serial, tod, rule['device_type'], rule['action'], fan_target,
                     )
 
         except Exception as exc:

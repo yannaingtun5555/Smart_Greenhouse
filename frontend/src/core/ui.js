@@ -80,8 +80,13 @@ export function renderAuthMode(mode) {
 // ── Connection status indicator ──
 export function setConnectionStatus(online) {
   const dot = $('connection-status');
+  const label = $('connection-label');
   if (!dot) return;
   dot.classList.toggle('online', online);
   dot.classList.toggle('offline', !online);
   dot.setAttribute('aria-label', online ? 'Online' : 'Offline');
+  if (label) {
+    label.textContent = online ? 'Live' : 'Offline';
+    label.classList.toggle('is-live', online);
+  }
 }

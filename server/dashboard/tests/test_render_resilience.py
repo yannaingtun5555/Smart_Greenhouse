@@ -55,6 +55,7 @@ def test_mqtt_push_schedules_retains_payload(monkeypatch):
             {
                 'id': 1,
                 'device_type': 'fan',
+                'fan_target': 'set1',
                 'condition_type': 'time',
                 'time_of_day': '06:00',
                 'sensor_name': None,

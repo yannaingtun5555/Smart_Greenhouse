@@ -126,7 +126,8 @@ class DeviceState(models.Model):
         primary_key=True,
         related_name='device_state',
     )
-    fan = models.BooleanField(default=False)
+    fan_set1 = models.BooleanField(default=False)
+    fan_set2 = models.BooleanField(default=False)
     water_pump = models.BooleanField(default=False)
     light = models.BooleanField(default=False)
     energy_state = models.CharField(

@@ -24,10 +24,10 @@ Components:
 2. DHT11                                                                                            -----fixed                                                       
    https://www.cestore-mm.com/product/dht11-temperature-and-humidity-sensor/
 
-3. DC Exhaust Fans (12V)
+3. DC Exhaust Fans (12V) - two sets (Set 1 & Set 2)
    https://www.cestore-mm.com/product/brushless-dc-fan/
    
-4. Relay Module 2 channel (or MOSFET module) – to control fans + to control water pump
+4. Relay Module 4 channel (or MOSFET module) – to control fan set 1, fan set 2 + to control water pump
    https://www.cestore-mm.com/product/2-channel-relay-module-5v10a/
       
 5. Servo Motor – for opening vents automatically
@@ -85,6 +85,6 @@ Design:
 	   ↓
 	Fuse
  	   ↓
-	12V Line → Pump + Fan
+	12V Line → Pump + Fan Set 1 + Fan Set 2
   	   ↓
 	XL4016 → 5V → ESP32  →  other sensors
