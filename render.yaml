@@ -6,6 +6,7 @@ services:
     rootDir: server/dashboard
     buildCommand: |
       pip install -r requirements.txt
+      cd ../.. && (command -v bun >/dev/null && cd frontend && bun install && bun run build || echo "Skipping frontend build — install bun or build frontend/dist locally")
       python manage.py collectstatic --noinput
     startCommand: |
       python manage.py migrate --noinput

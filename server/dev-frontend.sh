@@ -5,14 +5,12 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 FRONTEND="$ROOT/../frontend"
 
 LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+echo "Vite dev UI:  http://127.0.0.1:5173"
 if [[ -n "${LAN_IP}" ]]; then
-  echo "Local:   http://127.0.0.1:5500"
-  echo "Network: http://${LAN_IP}:5500"
-  echo "API:     http://${LAN_IP}:8000 (start server/dev.sh separately)"
-else
-  echo "Serving frontend on http://0.0.0.0:5500"
+  echo "Network UI:   http://${LAN_IP}:5173"
 fi
+echo "API proxy →   http://127.0.0.1:8000 (start backend with server/dev.sh)"
 echo
 
 cd "$FRONTEND"
-exec python3 -m http.server 5500 --bind 0.0.0.0
+exec bun run dev
