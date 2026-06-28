@@ -1,5 +1,20 @@
 services:
   # ─────────────────────────────────────────────
+  # Build React UI → frontend/dist (one-shot)
+  # ─────────────────────────────────────────────
+  frontend:
+    image: oven/bun:1.2
+    container_name: greenhouse_frontend_build
+    working_dir: /workspace
+    volumes:
+      - ../frontend:/workspace
+    command: >
+      sh -c "bun install && bun run build && test -f dist/index.html &&
+             chown -R 1000:1000 dist"
+    networks:
+      - greenhouse_network
+
+  # ─────────────────────────────────────────────
   # PostgreSQL
   # ─────────────────────────────────────────────
   db:
@@ -12,8 +27,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-greenhouse_user} -d ${DB_NAME:-greenhouse}"]
       interval: 10s
@@ -35,14 +50,14 @@ services:
       - greenhouse_network
 
   # ─────────────────────────────────────────────
-  # Redis (cache + optional Celery broker)
+  # Redis
   # ─────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: greenhouse_redis
     restart: always
-    ports:
-      - "127.0.0.1:6379:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -52,23 +67,25 @@ services:
       - greenhouse_network
 
   # ─────────────────────────────────────────────
-  # Django API server
+  # Django API + built React UI (single origin :8000)
   # ─────────────────────────────────────────────
   django:
     build: ./dashboard
     container_name: greenhouse_django
     restart: always
     command: >
-      sh -c "python manage.py migrate --noinput &&
-             python manage.py collectstatic --noinput &&
-             gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 core.wsgi:application"
+      sh -c "test -f /frontend/dist/index.html ||
+             (echo 'ERROR: /frontend/dist/index.html missing — frontend build failed' && exit 1) &&
+             python manage.py migrate --noinput &&
+             gunicorn --bind 0.0.0.0:8000 --workers 2 --timeout 120 core.wsgi:application"
     volumes:
       - ./dashboard:/app
       - ../frontend:/frontend
-      - static_volume:/app/staticfiles
     ports:
       - "8000:8000"
     depends_on:
+      frontend:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:
@@ -76,35 +93,36 @@ services:
       mqtt:
         condition: service_started
     environment:
-      # Django
       SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-change-me}
       DEBUG: ${DEBUG:-True}
       ALLOWED_HOSTS: "*"
       DJANGO_SETTINGS_MODULE: core.settings
-      # Database
       DB_NAME: ${DB_NAME:-greenhouse}
       DB_USER: ${DB_USER:-greenhouse_user}
       DB_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
       DB_HOST: db
       DB_PORT: 5432
-      # MQTT (defaults to local CoreFlux broker; set in .env for cloud broker)
       MQTT_BROKER: ${MQTT_BROKER:-mqtt}
       MQTT_PORT: ${MQTT_PORT:-1883}
       MQTT_USERNAME: ${MQTT_USERNAME:-}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-}
       MQTT_USE_TLS: ${MQTT_USE_TLS:-false}
       MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
-      # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      FRONTEND_DIR: /frontend
-      # CORS
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      FRONTEND_DIR: /frontend/dist
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8000}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/greenhouses/')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     networks:
       - greenhouse_network
 
   # ─────────────────────────────────────────────
-  # MQTT Worker (standalone listener + dispatcher)
+  # MQTT Worker
   # ─────────────────────────────────────────────
   mqtt_worker:
     build: ./mqtt
@@ -117,14 +135,14 @@ services:
         condition: service_healthy
       mqtt:
         condition: service_started
+      django:
+        condition: service_healthy
     environment:
-      # Database
       DB_NAME: ${DB_NAME:-greenhouse}
       DB_USER: ${DB_USER:-greenhouse_user}
       DB_PASSWORD: ${DB_PASSWORD:-greenhouse_pass}
       DB_HOST: db
       DB_PORT: 5432
-      # MQTT (defaults to local CoreFlux broker; set in .env for cloud broker)
       MQTT_BROKER: ${MQTT_BROKER:-mqtt}
       MQTT_PORT: ${MQTT_PORT:-1883}
       MQTT_USERNAME: ${MQTT_USERNAME:-}
@@ -134,9 +152,30 @@ services:
     networks:
       - greenhouse_network
 
+  # ─────────────────────────────────────────────
+  # Vite dev server (hot reload) — optional profile
+  #   docker compose --profile dev up
+  # ─────────────────────────────────────────────
+  frontend-dev:
+    image: oven/bun:1.2
+    container_name: greenhouse_frontend_dev
+    profiles: ["dev"]
+    working_dir: /workspace
+    volumes:
+      - ../frontend:/workspace
+    ports:
+      - "5173:5173"
+    command: sh -c "bun install && bun run dev"
+    environment:
+      VITE_API_PROXY: http://django:8000
+    depends_on:
+      django:
+        condition: service_healthy
+    networks:
+      - greenhouse_network
+
 volumes:
   postgres_data:
-  static_volume:
 
 networks:
   greenhouse_network:

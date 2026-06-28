@@ -9,11 +9,15 @@ from datetime import timedelta
 from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-_default_frontend = BASE_DIR.parent.parent / 'frontend'
-FRONTEND_DIR = Path(os.environ.get(
-    'FRONTEND_DIR',
-    str(_default_frontend if _default_frontend.exists() else '/frontend'),
-))
+_frontend_root = BASE_DIR.parent.parent / 'frontend'
+_frontend_dist = _frontend_root / 'dist'
+_env_frontend = os.environ.get('FRONTEND_DIR')
+if _env_frontend:
+    FRONTEND_DIR = Path(_env_frontend)
+elif (_frontend_dist / 'index.html').exists():
+    FRONTEND_DIR = _frontend_dist
+else:
+    FRONTEND_DIR = _frontend_root
 
 
 def _load_env_file():
