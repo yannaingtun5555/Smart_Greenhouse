@@ -174,6 +174,28 @@ services:
     networks:
       - greenhouse_network
 
+  # ─────────────────────────────────────────────
+  # React dev UI (hot reload) — separate port
+  #   docker compose --profile dev up
+  # ─────────────────────────────────────────────
+  frontend-react-dev:
+    image: oven/bun:1.2
+    container_name: greenhouse_frontend_react_dev
+    profiles: ["dev"]
+    working_dir: /workspace
+    volumes:
+      - ../frontend-react:/workspace
+    ports:
+      - "5174:5174"
+    command: sh -c "bun install && bun run dev -- --host 0.0.0.0 --port 5174"
+    environment:
+      VITE_API_PROXY: http://django:8000
+    depends_on:
+      django:
+        condition: service_healthy
+    networks:
+      - greenhouse_network
+
 volumes:
   postgres_data:
 
